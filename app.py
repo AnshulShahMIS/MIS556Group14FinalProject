@@ -56,25 +56,39 @@ try {
 
 
 
-def _hide_badges_from_first_paint() -> None:
+@st.cache_resource(show_spinner=False)
+def _hide_badges_from_first_paint() -> str:
     """Streamlit Cloud draws its badge at the same moment it loads the app's frame. The script above only runs once
-    the app's Python code starts (about 2 s later), so the badge flashes. This puts the same rule in the frame's own
-    HTML page (Streamlit's index.html), which loads in a fraction of a second, so later visits never see it.
-    Only on the Linux cloud server; on a local computer nothing is changed."""
-    if not sys.platform.startswith("linux") or os.getenv("AZ_KEEP_INDEX") == "1":
-        return
+    the app's Python code starts (about 2 s later), so the badge flashes. Here the same rule goes into the frame's own
+    HTML page, which loads in a fraction of a second: a copy of Streamlit's index.html with the rule added is written
+    to a temporary folder, and Streamlit's page server is told to look there first. Streamlit's installed files are
+    never changed. Runs once per server start, only on the Linux cloud server; does nothing on a local computer."""
+    if (not sys.platform.startswith("linux") and os.getenv("AZ_FORCE_INDEX") != "1") or os.getenv("AZ_KEEP_INDEX") == "1":
+        return "skipped (not on the cloud server)"
     try:
-        idx = Path(st.__file__).parent / "static" / "index.html"
-        html = idx.read_text(encoding="utf-8")
-        if "az-hide-cloud-badges" in html:
-            return
+        import gc
+        import tempfile
+
+        from starlette.staticfiles import StaticFiles
+
+        html = (Path(st.__file__).parent / "static" / "index.html").read_text(encoding="utf-8")
         snippet = ("<script>try{var t=window.top.document;if(t!==document&&!t.getElementById('az-hide-cloud-badges')){"
                    "var s=t.createElement('style');s.id='az-hide-cloud-badges';s.textContent="
                    "'[class*=\"_viewerBadge_\"],[class*=\"_profileContainer_\"],[class*=\"_profilePreview_\"]"
                    "{display:none!important}';t.head.appendChild(s);}}catch(e){}</script>")
-        idx.write_text(html.replace("<head>", "<head>" + snippet, 1), encoding="utf-8")
-    except Exception:  # read-only install or a changed page: the in-app script above still hides them
-        pass
+        folder = Path(tempfile.gettempdir()) / "saguaro_static"
+        folder.mkdir(exist_ok=True)
+        (folder / "index.html").write_text(html.replace("<head>", "<head>" + snippet, 1), encoding="utf-8")
+        patched = 0
+        for obj in gc.get_objects():
+            if isinstance(obj, StaticFiles) and type(obj).__name__ == "_StreamlitStaticFiles":
+                if str(folder) not in map(str, obj.all_directories):
+                    obj.all_directories = [str(folder), *obj.all_directories]  # our index.html wins; assets as before
+                obj._index_path = str(folder / "index.html")  # also for the page-not-found fallback
+                patched += 1
+        return f"badge rule in first paint ({patched} handler(s))"
+    except Exception as e:  # a Streamlit change: the in-app script above still hides the badges
+        return f"not applied: {type(e).__name__}"
 
 
 _hide_badges_from_first_paint()
