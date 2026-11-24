@@ -1,0 +1,29 @@
+name: tests
+
+# Runs the offline test suite (agents, features, security, interview, live-API mocks) on every push.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      AZ_OFFLINE: "1"          # no API keys needed: every agent uses its rule-based fallback
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install dependencies (CPU-only PyTorch)
+        run: python -m pip install -r requirements.txt
+      - name: Run tests
+        run: python -m pytest -q tests

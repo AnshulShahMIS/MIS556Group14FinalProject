@@ -1,5 +1,7 @@
 # Saguaro: a multi-agent Arizona trip planner (MIS 556, Group 14)
 
+[![tests](https://github.com/AnshulShahMIS/MIS556Group14FinalProject/actions/workflows/tests.yml/badge.svg)](https://github.com/AnshulShahMIS/MIS556Group14FinalProject/actions/workflows/tests.yml)
+
 Saguaro turns a sentence like *"Plan a Saturday in Scottsdale for four friends. We're all 24, have a $125
 budget per person, want a fun outdoor activity, Mexican food for dinner, and somewhere to go out
 afterward"* into a timed itinerary. The plan respects the budget, checks opening hours and keeps driving

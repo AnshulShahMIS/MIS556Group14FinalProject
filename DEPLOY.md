@@ -10,14 +10,14 @@ review vectors, and the team workbook. Nothing has to be rebuilt on the server.
 
 1. Sign in at [github.com](https://github.com) (or create a free account).
 2. Click **+** (top right) → **New repository**.
-   - Name: `saguaro-az` (or anything you like)
+   - Name: `MIS556Group14FinalProject`
    - Visibility: **Public** (the professor can open it without an invite, and Streamlit deploys it for free)
    - Do **not** tick "Add a README" or ".gitignore" (the project already has them).
-   - Click **Create repository** and copy its URL, e.g. `https://github.com/<your-username>/saguaro-az.git`.
+   - Click **Create repository** and copy its URL, e.g. `https://github.com/AnshulShahMIS/MIS556Group14FinalProject.git`.
 3. In PowerShell, inside the project folder, run (one at a time):
 
 ```powershell
-git remote add origin https://github.com/<your-username>/saguaro-az.git
+git remote add origin https://github.com/AnshulShahMIS/MIS556Group14FinalProject.git
 ```
 
 ```powershell
@@ -35,7 +35,7 @@ git push -u origin main
 1. Go to [share.streamlit.io](https://share.streamlit.io) and choose **Continue with GitHub**, then allow access.
 2. Click **Create app** → **Deploy a public app from GitHub**.
 3. Fill in:
-   - **Repository:** `<your-username>/saguaro-az`
+   - **Repository:** `AnshulShahMIS/MIS556Group14FinalProject`
    - **Branch:** `main`
    - **Main file path:** `app.py`
    - **App URL:** pick something short, e.g. `saguaro-az` → `https://saguaro-az.streamlit.app`
