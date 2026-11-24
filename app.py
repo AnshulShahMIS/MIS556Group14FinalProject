@@ -35,34 +35,56 @@ st.html("""<style>
   content: "%s"; font-size: 0.9rem; color: rgba(49, 51, 63, 0.75); padding: 0 0.5rem; white-space: nowrap;
   animation: az-pulse 1.4s ease-in-out infinite; }
 @keyframes az-pulse { 0%%, 100%% { opacity: 1; } 50%% { opacity: 0.45; } }
+/* Streamlit Cloud's "Fork" / GitHub / share buttons in the app's top bar: not shown to visitors */
+[data-testid="stToolbarActions"] { display: none !important; }
 /* the zero-height helper frame below takes no space */
 [data-testid="stElementContainer"]:has(iframe[height="0"]), .element-container:has(iframe[height="0"]) { display: none; }
 </style>""" % ("Working..." if st.session_state.get("_ready") else "Connecting..."))
-# Streamlit Community Cloud wraps the app in its own page and adds a "Hosted with Streamlit" badge and the creator's
-# profile picture for visitors. That page is on the same address as the app, so a style rule added from here hides
-# those two (the owner-only "Manage app" button is untouched). Does nothing when run locally.
-components.html("""<script>
-try {
-  const top = window.top.document;
-  if (top !== document && !top.getElementById("az-hide-cloud-badges")) {
-    const s = top.createElement("style");
-    s.id = "az-hide-cloud-badges";
-    s.textContent = '[class*="_viewerBadge_"], [class*="_profileContainer_"], [class*="_profilePreview_"]'
-                  + ' { display: none !important; }';
-    top.head.appendChild(s);
-  }
-} catch (e) {}
-</script>""", height=0)
+# Streamlit Community Cloud wraps the app in its own page: it adds a "Hosted with Streamlit" badge and the creator's
+# profile picture for visitors, and shows Streamlit's tab icon until the app has started. That page is on the same
+# address as the app, so this script (run from inside the app) hides the two badges and puts the saguaro icon and
+# the app's title on the browser tab straight away. The owner-only "Manage app" button is untouched. Locally it
+# finds no Streamlit Cloud page and only sets the tab icon, which the app does anyway.
+def _early_js() -> str:
+    import base64
+    import io
 
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.open(Path(__file__).parent / "assets" / "icon.png").resize((64, 64), Image.LANCZOS).save(buf, "PNG", optimize=True)
+    icon = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+    return ("try{var d=document;if(!d.getElementById('az-hide-toolbar')){var x=d.createElement('style');"
+            "x.id='az-hide-toolbar';x.textContent='[data-testid=\"stToolbarActions\"]{display:none!important}';"
+            "(d.head||d.documentElement).appendChild(x);}}catch(e){}"
+            "try{var t=window.top.document;if(!t.getElementById('az-hide-cloud-badges')){"
+            "var s=t.createElement('style');s.id='az-hide-cloud-badges';s.textContent="
+            "'[class*=\"_viewerBadge_\"],[class*=\"_profileContainer_\"],[class*=\"_profilePreview_\"]"
+            "{display:none!important}';t.head.appendChild(s);"
+            # keep only the saguaro icon on the tab: ours (built in) or the app's own (served from /media/);
+            # Streamlit's default icons are removed whenever they're added or switched in
+            "var ic='" + icon + "';var keep=function(){var ours=null;"
+            "t.querySelectorAll('link[rel~=\"icon\"],link[rel=\"apple-touch-icon\"],link[rel=\"mask-icon\"]')"
+            ".forEach(function(l){var h=l.getAttribute('href')||'';if(h.indexOf('/media/')>=0)return;"
+            "if(l.id==='az-icon'){ours=l;if(h!==ic)l.setAttribute('href',ic);}else{l.parentNode.removeChild(l);}});"
+            "if(!ours){var n=t.createElement('link');n.id='az-icon';n.rel='icon';n.type='image/png';n.href=ic;"
+            "t.head.appendChild(n);}"
+            "if(!/Saguaro/.test(t.title)){t.title='Saguaro · Arizona day planner';}};"
+            "keep();new MutationObserver(keep).observe(t.head,{childList:true,subtree:true,attributes:true,"
+            "attributeFilter:['href']});}}catch(e){}")
+
+
+EARLY_JS = _early_js()
+components.html(f"<script>{EARLY_JS}</script>", height=0)
 
 
 @st.cache_resource(show_spinner=False)
 def _hide_badges_from_first_paint() -> str:
     """Streamlit Cloud draws its badge at the same moment it loads the app's frame. The script above only runs once
-    the app's Python code starts (about 2 s later), so the badge flashes. Here the same rule goes into the frame's own
-    HTML page, which loads in a fraction of a second: a copy of Streamlit's index.html with the rule added is written
-    to a temporary folder, and Streamlit's page server is told to look there first. Streamlit's installed files are
-    never changed. Runs once per server start, only on the Linux cloud server; does nothing on a local computer."""
+    the app's Python code starts (about 2 s later), so the badge flashes. Here the same script goes into the frame's
+    own HTML page, which loads in a fraction of a second: a copy of Streamlit's index.html with the script added is
+    written to a temporary folder, and Streamlit's page server is told to look there first. Streamlit's installed
+    files are never changed. Runs once per server start, only on the Linux cloud server; does nothing locally."""
     if (not sys.platform.startswith("linux") and os.getenv("AZ_FORCE_INDEX") != "1") or os.getenv("AZ_KEEP_INDEX") == "1":
         return "skipped (not on the cloud server)"
     try:
@@ -72,13 +94,9 @@ def _hide_badges_from_first_paint() -> str:
         from starlette.staticfiles import StaticFiles
 
         html = (Path(st.__file__).parent / "static" / "index.html").read_text(encoding="utf-8")
-        snippet = ("<script>try{var t=window.top.document;if(t!==document&&!t.getElementById('az-hide-cloud-badges')){"
-                   "var s=t.createElement('style');s.id='az-hide-cloud-badges';s.textContent="
-                   "'[class*=\"_viewerBadge_\"],[class*=\"_profileContainer_\"],[class*=\"_profilePreview_\"]"
-                   "{display:none!important}';t.head.appendChild(s);}}catch(e){}</script>")
         folder = Path(tempfile.gettempdir()) / "saguaro_static"
         folder.mkdir(exist_ok=True)
-        (folder / "index.html").write_text(html.replace("<head>", "<head>" + snippet, 1), encoding="utf-8")
+        (folder / "index.html").write_text(html.replace("<head>", f"<head><script>{EARLY_JS}</script>", 1), encoding="utf-8")
         patched = 0
         for obj in gc.get_objects():
             if isinstance(obj, StaticFiles) and type(obj).__name__ == "_StreamlitStaticFiles":
