@@ -1,6 +1,6 @@
 # Deploying Saguaro: GitHub + Streamlit Community Cloud
 
-**Deployed:** https://anshulshahmis.github.io/saguaro/ (front page in the AnshulShahMIS/saguaro repository: saguaro tab icon and title, shows the Streamlit app in embed mode so the creator's profile picture is never drawn). The app itself runs at https://saguaro.streamlit.app/?embed=true, from https://github.com/AnshulShahMIS/MIS556Group14FinalProject (branch `main`, `app.py`, Python 3.13).
+**Deployed:** https://saguaro.streamlit.app/?embed=true from this repository (branch `main`, `app.py`, Python 3.13). Share this form of the link: in embed mode Streamlit never shows the creator's profile picture or its badge. `docs/index.html` is an optional front page (GitHub Pages) with the Saguaro tab icon from the first moment.
 
 **GitHub** holds the code and project files (what the professor browses). **Streamlit Community Cloud**
 runs the app from that GitHub repository and gives it a permanent public link. Both are free.
