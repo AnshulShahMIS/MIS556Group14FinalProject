@@ -20,9 +20,42 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
+import streamlit as st  # noqa: E402
+import streamlit.components.v1 as components  # noqa: E402
+
+# Set up the page FIRST, before the slow imports below (agents, PyTorch), so the tab icon, the "Connecting..."
+# text and the hidden Streamlit Cloud badges apply within the first second of a visit.
+st.set_page_config(page_title="Saguaro · Arizona day planner", page_icon=str(Path(__file__).parent / "assets" / "icon.png"),
+                   layout="wide")
+# Replace Streamlit's "running man" + Stop button (top right) with plain text: "Connecting..." while the page first
+# loads, "Working..." while the agents run later.
+st.html("""<style>
+[data-testid="stStatusWidget"] > * { display: none !important; }
+[data-testid="stStatusWidget"]::before {
+  content: "%s"; font-size: 0.9rem; color: rgba(49, 51, 63, 0.75); padding: 0 0.5rem; white-space: nowrap;
+  animation: az-pulse 1.4s ease-in-out infinite; }
+@keyframes az-pulse { 0%%, 100%% { opacity: 1; } 50%% { opacity: 0.45; } }
+/* the zero-height helper frame below takes no space */
+[data-testid="stElementContainer"]:has(iframe[height="0"]), .element-container:has(iframe[height="0"]) { display: none; }
+</style>""" % ("Working..." if st.session_state.get("_ready") else "Connecting..."))
+# Streamlit Community Cloud wraps the app in its own page and adds a "Hosted with Streamlit" badge and the creator's
+# profile picture for visitors. That page is on the same address as the app, so a style rule added from here hides
+# those two (the owner-only "Manage app" button is untouched). Does nothing when run locally.
+components.html("""<script>
+try {
+  const top = window.top.document;
+  if (top !== document && !top.getElementById("az-hide-cloud-badges")) {
+    const s = top.createElement("style");
+    s.id = "az-hide-cloud-badges";
+    s.textContent = '[class*="_viewerBadge_"], [class*="_profileContainer_"], [class*="_profilePreview_"]'
+                  + ' { display: none !important; }';
+    top.head.appendChild(s);
+  }
+} catch (e) {}
+</script>""", height=0)
+
 import pandas as pd  # noqa: E402
 import pydeck as pdk  # noqa: E402
-import streamlit as st  # noqa: E402
 
 from azmulti import live, llm, shared  # noqa: E402
 from azmulti.agents.concierge import web_links  # noqa: E402
@@ -32,16 +65,6 @@ from azmulti.graph import Planner  # noqa: E402
 from azmulti.hours import DAYS, fmt_time  # noqa: E402
 from azmulti.security import RateLimiter, clean_name, esc, redact, safe_url, sanitize_markdown, valid_key_format  # noqa: E402
 
-st.set_page_config(page_title="Saguaro · Arizona day planner", page_icon=":material/explore:", layout="wide")
-# Replace Streamlit's "running man" + Stop button (top right) with plain text: "Connecting..." while the page first
-# loads, "Working..." while the agents run later. Injected before the slow warm-up so it applies from the start.
-st.html("""<style>
-[data-testid="stStatusWidget"] > * { display: none !important; }
-[data-testid="stStatusWidget"]::before {
-  content: "%s"; font-size: 0.9rem; color: rgba(49, 51, 63, 0.75); padding: 0 0.5rem; white-space: nowrap;
-  animation: az-pulse 1.4s ease-in-out infinite; }
-@keyframes az-pulse { 0%%, 100%% { opacity: 1; } 50%% { opacity: 0.45; } }
-</style>""" % ("Working..." if st.session_state.get("_ready") else "Connecting..."))
 md = sanitize_markdown
 REQUIRE_USER_KEY = os.getenv("AZ_REQUIRE_USER_KEY", "0") == "1"
 
@@ -1082,24 +1105,6 @@ top_bar()
 auto_sync()
 nav.run()
 ss["_ready"] = True  # first full page shown: later runs say "Working..." instead of "Connecting..."
-if not ss.get("_badges_hidden"):
-    # Streamlit Community Cloud wraps the app in its own page and adds a "Hosted with Streamlit" badge and the
-    # creator's profile picture for visitors. That page is on the same address as the app, so a one-time style
-    # rule hides those two (owner-only "Manage app" is untouched). Does nothing when run locally.
-    import streamlit.components.v1 as components
-    components.html("""<script>
-    try {
-      const top = window.top.document;
-      if (top !== document && !top.getElementById("az-hide-cloud-badges")) {
-        const s = top.createElement("style");
-        s.id = "az-hide-cloud-badges";
-        s.textContent = '[class*="_viewerBadge_"], [class*="_profileContainer_"], [class*="_profilePreview_"]'
-                      + ' { display: none !important; }';
-        top.head.appendChild(s);
-      }
-    } catch (e) {}
-    </script>""", height=0)
-    ss["_badges_hidden"] = True
 if time.time() - _T0 > 2:
     logging.getLogger("app").warning("slow run (%s): %.1fs", nav.url_path or "chat", time.time() - _T0)
 goto(ss.pop("_goto", None))  # page switches happen here, outside any form or column
