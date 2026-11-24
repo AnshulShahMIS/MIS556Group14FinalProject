@@ -1,0 +1,35 @@
+[runner]
+# Don't interrupt a running plan when a new message arrives; it is queued instead.
+fastReruns = false
+
+[server]
+# Security hardening
+enableXsrfProtection = true     # block cross-site form/websocket forgery
+enableCORS = true               # only same-origin requests
+enableStaticServing = false     # no public static folder
+maxUploadSize = 1               # the app takes no uploads
+maxMessageSize = 50             # MB, caps oversized websocket messages
+headless = true
+
+[client]
+showErrorDetails = "none"       # never show tracebacks (paths, values) to visitors
+toolbarMode = "viewer"          # hide developer menu / deploy button from visitors
+showSidebarNavigation = false
+
+[browser]
+gatherUsageStats = false        # no telemetry to Streamlit
+
+[theme]
+# Clean, calm light theme: warm desert accent on white
+base = "light"
+primaryColor = "#B4532A"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F6F4F1"
+textColor = "#1F2328"
+font = "sans serif"
+baseRadius = "medium"
+borderColor = "#E7E2DA"
+showWidgetBorder = true
+
+[theme.sidebar]
+backgroundColor = "#FAF8F5"

@@ -1,0 +1,31 @@
+# Secrets: never commit keys (use .env locally, Streamlit "Secrets" when deployed)
+.env
+.streamlit/secrets.toml
+
+# Python / tooling
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+.claude/
+launch.json
+streamlit.log*
+
+# Raw data that is only needed to REBUILD the catalog (python -m azmulti.build), not to run the app.
+# arizona_places_extended.csv is 122 MB, over GitHub's 100 MB file limit.
+data/raw/arizona_places_extended.csv
+data/raw/*.parquet
+# TF-IDF baseline model (50 MB): only used by eval/evaluate.py, which rebuilds it when missing
+data/processed/tfidf.pkl
+
+# Written while the app runs (per-user / per-server, never shared through git)
+data/profiles/
+data/cache/
+data/shared/
+data/closed_reports.json
+
+# Committed on purpose so the deployed app runs without a rebuild and the professor can see the data:
+#   data/raw/Arizona_Places_TripAdvisor_Hiking.xlsx   (the team workbook, 23 MB)
+#   data/processed/catalog.parquet, embeddings.npy, review_vecs.npy, review_meta.parquet,
+#   city_centroids.parquet, embedder.json
