@@ -57,9 +57,9 @@ def _early_js() -> str:
     return ("try{var d=document;if(!d.getElementById('az-hide-toolbar')){var x=d.createElement('style');"
             "x.id='az-hide-toolbar';x.textContent='[data-testid=\"stToolbarActions\"]{display:none!important}';"
             "(d.head||d.documentElement).appendChild(x);}}catch(e){}"
-            # the Streamlit Cloud page: the top window, or (when the app is shown inside the GitHub Pages
-            # page, a different site) the page directly around the app
-            "try{var t;try{t=window.top.document;}catch(e){t=window.parent.document;}"
+            # the Streamlit Cloud page: the outermost page this frame may reach (the top window, or, when the
+            # app is shown inside the GitHub Pages page, a different site, the Streamlit page just inside it)
+            "try{var w=window,t=document;try{while(w.parent!==w){t=w.parent.document;w=w.parent;}}catch(e){}"
             "if(!t.getElementById('az-hide-cloud-badges')){"
             "var s=t.createElement('style');s.id='az-hide-cloud-badges';s.textContent="
             "'[class*=\"_viewerBadge_\"],[class*=\"_profileContainer_\"],[class*=\"_profilePreview_\"],"
