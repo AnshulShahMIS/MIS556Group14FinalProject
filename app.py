@@ -25,7 +25,7 @@ import streamlit.components.v1 as components  # noqa: E402
 
 # Set up the page FIRST, before the slow imports below (agents, PyTorch), so the tab icon, the "Connecting..."
 # text and the hidden Streamlit Cloud badges apply within the first second of a visit.
-st.set_page_config(page_title="Saguaro · Arizona day planner", page_icon=str(Path(__file__).parent / "assets" / "icon.png"),
+st.set_page_config(page_title="Saguaro", page_icon=str(Path(__file__).parent / "assets" / "icon.png"),
                    layout="wide")
 # Replace Streamlit's "running man" + Stop button (top right) with plain text: "Connecting..." while the page first
 # loads, "Working..." while the agents run later.
@@ -74,7 +74,7 @@ def _early_js() -> str:
             "if(l.id==='az-icon'){ours=l;if(h!==ic)l.setAttribute('href',ic);}else{l.parentNode.removeChild(l);}});"
             "if(!ours){var n=t.createElement('link');n.id='az-icon';n.rel='icon';n.type='image/png';n.href=ic;"
             "t.head.appendChild(n);}"
-            "if(!/Saguaro/.test(t.title)){t.title='Saguaro · Arizona day planner';}};"
+            "if(!/Saguaro/.test(t.title)){t.title='Saguaro';}};"
             "keep();new MutationObserver(keep).observe(t.head,{childList:true,subtree:true,attributes:true,"
             "attributeFilter:['href']});}}catch(e){}")
 
