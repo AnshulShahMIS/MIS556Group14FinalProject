@@ -1,5 +1,7 @@
 # Deploying Saguaro: GitHub + Streamlit Community Cloud
 
+**Deployed:** https://saguaro.streamlit.app, from https://github.com/AnshulShahMIS/MIS556Group14FinalProject (branch `main`, `app.py`, Python 3.13).
+
 **GitHub** holds the code and project files (what the professor browses). **Streamlit Community Cloud**
 runs the app from that GitHub repository and gives it a permanent public link. Both are free.
 
@@ -38,7 +40,7 @@ git push -u origin main
    - **Repository:** `AnshulShahMIS/MIS556Group14FinalProject`
    - **Branch:** `main`
    - **Main file path:** `app.py`
-   - **App URL:** pick something short, e.g. `saguaro-az` → `https://saguaro-az.streamlit.app`
+   - **App URL:** `saguaro` → `https://saguaro.streamlit.app` (the live app)
 4. Open **Advanced settings**:
    - **Python version:** `3.13`
    - **Secrets:** paste only the keys you want (all optional - see below). Leave it empty to start.
