@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Saguaro · Arizona day planner</title>
+  <meta name="description" content="Saguaro: a multi-agent AI trip planner for Arizona (MIS 556, Group 14).">
+  <!-- The tab shows the saguaro icon from the first moment (this page is served by GitHub Pages). -->
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="icon" type="image/png" sizes="256x256" href="icon.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="theme-color" content="#B4532A">
+  <style>
+    html, body { margin: 0; height: 100%; background: #fff; }
+    /* while the app loads (it can take ~2 minutes after the free hosting has been asleep) */
+    #loading { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+               gap: 14px; font: 16px system-ui, -apple-system, "Segoe UI", sans-serif; color: #5b5f6b; }
+    #loading img { width: 72px; height: 72px; }
+    #loading .dots::after { content: ""; animation: dots 1.4s steps(4, end) infinite; }
+    @keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
+    iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; }
+  </style>
+</head>
+<body>
+  <div id="loading">
+    <img src="icon.png" alt="">
+    <div>Connecting to Saguaro<span class="dots"></span></div>
+  </div>
+  <!-- The app runs on Streamlit Community Cloud. "?embed=true" is Streamlit's mode for showing an app inside another
+       page: it never draws the creator's profile picture or the "Hosted with Streamlit" badge. -->
+  <iframe src="https://saguaro.streamlit.app/?embed=true" title="Saguaro - Arizona day planner"
+          allow="clipboard-write; geolocation; fullscreen"></iframe>
+  <noscript><p style="position:fixed;bottom:8px;left:8px">Open the app directly:
+    <a href="https://saguaro.streamlit.app/?embed=true">saguaro.streamlit.app</a></p></noscript>
+</body>
+</html>
