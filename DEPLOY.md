@@ -1,6 +1,6 @@
 # Deploying Saguaro: GitHub + Streamlit Community Cloud
 
-**Deployed:** https://saguaro.streamlit.app, from https://github.com/AnshulShahMIS/MIS556Group14FinalProject (branch `main`, `app.py`, Python 3.13).
+**Deployed:** https://saguaro.streamlit.app/?embed=true (share this form of the link: it never shows the creator's profile picture; the plain link switches to it automatically), from https://github.com/AnshulShahMIS/MIS556Group14FinalProject (branch `main`, `app.py`, Python 3.13).
 
 **GitHub** holds the code and project files (what the professor browses). **Streamlit Community Cloud**
 runs the app from that GitHub repository and gives it a permanent public link. Both are free.

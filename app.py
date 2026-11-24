@@ -59,7 +59,9 @@ def _early_js() -> str:
             "(d.head||d.documentElement).appendChild(x);}}catch(e){}"
             "try{var t=window.top.document;if(!t.getElementById('az-hide-cloud-badges')){"
             "var s=t.createElement('style');s.id='az-hide-cloud-badges';s.textContent="
-            "'[class*=\"_viewerBadge_\"],[class*=\"_profileContainer_\"],[class*=\"_profilePreview_\"]"
+            "'[class*=\"_viewerBadge_\"],[class*=\"_profileContainer_\"],[class*=\"_profilePreview_\"],"
+            # embed mode's "Built with Streamlit / Fullscreen" strip (the Fullscreen link leads back to the badge)
+            "[class*=\"_container_\"]:has(> [class*=\"_hostedName_\"]),[class*=\"_hostedName_\"],[class*=\"_linkOutText_\"]"
             "{display:none!important}';t.head.appendChild(s);"
             # keep only the saguaro icon on the tab: ours (built in) or the app's own (served from /media/);
             # Streamlit's default icons are removed whenever they're added or switched in
@@ -76,6 +78,13 @@ def _early_js() -> str:
 
 EARLY_JS = _early_js()
 components.html(f"<script>{EARLY_JS}</script>", height=0)
+
+# Privacy: in embed mode (?embed=true) Streamlit Cloud never draws the creator's profile picture or the badge at all,
+# so a visitor who opens the plain link is sent to the embed version straight away. Only in the frame's first page
+# (loaded once per visit), never on reruns, so moving between the app's tabs can't trigger a reload.
+EMBED_REDIRECT_JS = ("try{var L=window.top.location;if(/\\.streamlit\\.app$/.test(L.hostname)&&"
+                     "!/[?&]embed=true/.test(L.search)){var u=new URL(L.href);u.searchParams.set('embed','true');"
+                     "L.replace(u.toString());}}catch(e){}")
 
 
 @st.cache_resource(show_spinner=False)
@@ -96,7 +105,8 @@ def _hide_badges_from_first_paint() -> str:
         html = (Path(st.__file__).parent / "static" / "index.html").read_text(encoding="utf-8")
         folder = Path(tempfile.gettempdir()) / "saguaro_static"
         folder.mkdir(exist_ok=True)
-        (folder / "index.html").write_text(html.replace("<head>", f"<head><script>{EARLY_JS}</script>", 1), encoding="utf-8")
+        (folder / "index.html").write_text(html.replace("<head>", f"<head><script>{EMBED_REDIRECT_JS}{EARLY_JS}</script>", 1),
+                                           encoding="utf-8")
         patched = 0
         for obj in gc.get_objects():
             if isinstance(obj, StaticFiles) and type(obj).__name__ == "_StreamlitStaticFiles":

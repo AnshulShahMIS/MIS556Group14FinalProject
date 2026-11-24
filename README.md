@@ -12,7 +12,7 @@ It is built on the team workbook `Arizona_Places_TripAdvisor_Hiking.xlsx`, which
 places, 636 TripAdvisor matches, and the TripAdvisor review and hiking summaries. It uses the four GenAI
 methods from our midterm milestone.
 
-**Live app: https://saguaro.streamlit.app** (free hosting: if it has been asleep, click "Yes, get this app back up" and give it about 2 minutes)  
+**Live app: https://saguaro.streamlit.app/?embed=true** (free hosting: if it has been asleep, click "Yes, get this app back up" and give it about 2 minutes)  
 **Code: https://github.com/AnshulShahMIS/MIS556Group14FinalProject**
 
 ## Where to find things
