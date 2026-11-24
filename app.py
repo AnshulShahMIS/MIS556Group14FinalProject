@@ -54,6 +54,31 @@ try {
 } catch (e) {}
 </script>""", height=0)
 
+
+
+def _hide_badges_from_first_paint() -> None:
+    """Streamlit Cloud draws its badge at the same moment it loads the app's frame. The script above only runs once
+    the app's Python code starts (about 2 s later), so the badge flashes. This puts the same rule in the frame's own
+    HTML page (Streamlit's index.html), which loads in a fraction of a second, so later visits never see it.
+    Only on the Linux cloud server; on a local computer nothing is changed."""
+    if not sys.platform.startswith("linux") or os.getenv("AZ_KEEP_INDEX") == "1":
+        return
+    try:
+        idx = Path(st.__file__).parent / "static" / "index.html"
+        html = idx.read_text(encoding="utf-8")
+        if "az-hide-cloud-badges" in html:
+            return
+        snippet = ("<script>try{var t=window.top.document;if(t!==document&&!t.getElementById('az-hide-cloud-badges')){"
+                   "var s=t.createElement('style');s.id='az-hide-cloud-badges';s.textContent="
+                   "'[class*=\"_viewerBadge_\"],[class*=\"_profileContainer_\"],[class*=\"_profilePreview_\"]"
+                   "{display:none!important}';t.head.appendChild(s);}}catch(e){}</script>")
+        idx.write_text(html.replace("<head>", "<head>" + snippet, 1), encoding="utf-8")
+    except Exception:  # read-only install or a changed page: the in-app script above still hides them
+        pass
+
+
+_hide_badges_from_first_paint()
+
 import pandas as pd  # noqa: E402
 import pydeck as pdk  # noqa: E402
 
