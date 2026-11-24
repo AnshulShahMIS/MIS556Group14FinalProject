@@ -1082,6 +1082,24 @@ top_bar()
 auto_sync()
 nav.run()
 ss["_ready"] = True  # first full page shown: later runs say "Working..." instead of "Connecting..."
+if not ss.get("_badges_hidden"):
+    # Streamlit Community Cloud wraps the app in its own page and adds a "Hosted with Streamlit" badge and the
+    # creator's profile picture for visitors. That page is on the same address as the app, so a one-time style
+    # rule hides those two (owner-only "Manage app" is untouched). Does nothing when run locally.
+    import streamlit.components.v1 as components
+    components.html("""<script>
+    try {
+      const top = window.top.document;
+      if (top !== document && !top.getElementById("az-hide-cloud-badges")) {
+        const s = top.createElement("style");
+        s.id = "az-hide-cloud-badges";
+        s.textContent = '[class*="_viewerBadge_"], [class*="_profileContainer_"], [class*="_profilePreview_"]'
+                      + ' { display: none !important; }';
+        top.head.appendChild(s);
+      }
+    } catch (e) {}
+    </script>""", height=0)
+    ss["_badges_hidden"] = True
 if time.time() - _T0 > 2:
     logging.getLogger("app").warning("slow run (%s): %.1fs", nav.url_path or "chat", time.time() - _T0)
 goto(ss.pop("_goto", None))  # page switches happen here, outside any form or column
