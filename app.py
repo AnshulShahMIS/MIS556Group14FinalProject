@@ -106,31 +106,53 @@ def _early_js() -> str:
             "if(l.id==='az-icon'){ours=l;if(h!==ic)l.setAttribute('href',ic);}else{l.parentNode.removeChild(l);}});"
             "if(!ours){var n=t.createElement('link');n.id='az-icon';n.rel='icon';n.type='image/png';n.href=ic;"
             "t.head.appendChild(n);}"
-            "if(!/Saguaro/.test(t.title)){t.title='Saguaro';}};"
+            "if(t.title!=='Saguaro'){t.title='Saguaro';}};"
             "keep();new MutationObserver(keep).observe(t.head,{childList:true,subtree:true,attributes:true,"
             "attributeFilter:['href']});}}catch(e){}")
 
 
 # Light / dark theme. This code runs in the Streamlit app's own page (not in a component frame, whose code stops when
 # Streamlit replaces the frame):
-#  - __azPick('Light' | 'Dark') clicks Streamlit's own theme setting (menu > Light / Dark), which switches the look in
-#    place without reloading the page (a reload would start a new session and lose the trip);
-#  - a visitor who hasn't chosen yet (Streamlit stores "System") gets the light theme, even if the computer is dark;
+#  - __azPick('Light' | 'Dark') switches the look in place, without reloading the page (a reload would start a new
+#    session and lose the trip). Where Streamlit's menu exists (running locally) it clicks the menu's Light / Dark
+#    setting. In the embedded app on Streamlit Cloud there is no menu, so it sends Streamlit the theme itself (the
+#    SET_CUSTOM_THEME_CONFIG message Streamlit accepts from its host page) and remembers the choice for next time;
+#  - a visitor who hasn't chosen yet gets the light theme, even if the computer is set to dark;
 #  - while the dark theme shows, the page gets class az-dark, for the card colours and the switch's label above.
-THEME_SRC = (
-    "if(!window.__azPick){window.__azPick=async function(n){var D=document,"
-    "s=function(m){return new Promise(function(r){setTimeout(r,m)})};"
-    "var b=D.querySelector('[data-testid=\"stMainMenu\"] button, button[aria-label=\"Main menu\"]');if(!b)return;"
-    "var it=null;for(var i=0;i<20&&!it;i++){if(i%5===0)b.click();await s(120);"
-    "it=D.querySelector('[data-testid=\"stMainMenuItem-theme-'+n+'\"]');}"
-    "if(it){it.click();await s(150);}if(D.querySelector('[data-testid^=\"stMainMenuItem\"]'))b.click();};}"
-    "if(!window.__azTheme){window.__azTheme=1;var K='stActiveTheme-'+location.pathname+'-v2';"
-    "var v=localStorage.getItem(K);var first=!v||v==='\"System\"';if(first)localStorage.setItem(K,JSON.stringify('Light'));"
-    "setInterval(function(){var a=document.querySelector('.stApp');if(!a)return;"
-    "var m=getComputedStyle(a).backgroundColor.match(/[0-9]+/g);if(!m)return;var dark=(+m[0])+(+m[1])+(+m[2])<300;"
-    "document.documentElement.classList.toggle('az-dark',dark);"
-    "if(first&&document.querySelector('[data-testid=\"stMainMenu\"] button, button[aria-label=\"Main menu\"]')){"
-    "first=false;if(dark)window.__azPick('Light');}},300);}")
+def _theme_src() -> str:
+    import json
+    import tomllib
+
+    cfg = tomllib.loads((Path(__file__).parent / ".streamlit" / "config.toml").read_text(encoding="utf-8"))["theme"]
+    common = {"bodyFont": "Inter, sans-serif", "headingFont": "Fraunces, serif", "baseRadius": cfg.get("baseRadius", "0.75rem"),
+              "showWidgetBorder": True}
+    keys = ("primaryColor", "backgroundColor", "secondaryBackgroundColor", "textColor", "borderColor", "linkColor")
+    themes = {"Light": {"base": 0, **{k: cfg["light"][k] for k in keys}, **common},
+              "Dark": {"base": 1, **{k: cfg["dark"][k] for k in keys}, **common}}
+    menu = "document.querySelector('[data-testid=\"stMainMenu\"] button, button[aria-label=\"Main menu\"]')"
+    return (
+        "if(!window.__azPick){var TH=" + json.dumps(themes) + ";"
+        "window.__azPick=async function(n){var D=document,s=function(m){return new Promise(function(r){setTimeout(r,m)})};"
+        "var b=" + menu + ";"
+        "if(!b){try{localStorage.setItem('azTheme',n);}catch(e){}"
+        "window.postMessage({stCommVersion:1,type:'SET_CUSTOM_THEME_CONFIG',themeName:'Saguaro '+n,themeInfo:TH[n]},'*');return;}"
+        "var it=null;for(var i=0;i<20&&!it;i++){if(i%5===0)b.click();await s(120);"
+        "it=D.querySelector('[data-testid=\"stMainMenuItem-theme-'+n+'\"]');}"
+        "if(it){it.click();await s(150);}if(D.querySelector('[data-testid^=\"stMainMenuItem\"]'))b.click();};}"
+        "if(!window.__azTheme){window.__azTheme=1;var K='stActiveTheme-'+location.pathname+'-v2';"
+        "var v=localStorage.getItem(K);var first=!v||v==='\"System\"';if(first)localStorage.setItem(K,JSON.stringify('Light'));"
+        "var embedded=window!==window.parent,started=false;"
+        "setInterval(function(){var a=document.querySelector('.stApp');if(!a)return;"
+        "var m=getComputedStyle(a).backgroundColor.match(/[0-9]+/g);if(!m)return;var dark=(+m[0])+(+m[1])+(+m[2])<300;"
+        "document.documentElement.classList.toggle('az-dark',dark);"
+        "if(started)return;var b=" + menu + ";"
+        "if(b){started=true;if(first&&dark)window.__azPick('Light');}"  # menu: Streamlit remembers the choice itself
+        "else if(embedded&&document.querySelector('[data-testid=\"stMain\"]')){started=true;"
+        "var want=localStorage.getItem('azTheme')||'Light';if((dark?'Dark':'Light')!==want)window.__azPick(want);}"
+        "},300);}")
+
+
+THEME_SRC = _theme_src()
 
 
 def in_app_page(src: str) -> str:
