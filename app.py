@@ -46,6 +46,9 @@ st.html("""<style>
 [class*="st-key-card"] { box-shadow: 0 1px 2px rgba(42, 36, 32, 0.04); }
 [data-testid="stHeader"] { background: #FFFFFF; border-bottom: 1px solid #EADFD3; }
 h1 { letter-spacing: -0.01em; }
+/* the chat's quick suggestions look like small rounded chips */
+.st-key-followups button { border-radius: 999px; min-height: 2rem; padding: 0.15rem 0.8rem; }
+.st-key-followups button p { font-size: 0.85rem; }
 /* planning screen: the chat column stays in view while the trip on the right scrolls, and its conversation fills
    the screen height (wide screens only; on phones the chat sits above the trip) */
 @media (min-width: 900px) {
@@ -718,9 +721,11 @@ def chat_panel(st_):
     pending_buttons(st_)
     q = question_card()
     if not q:  # the most used follow-ups as buttons, the rest one click away (keeps the chat column tidy)
-        with st.container(horizontal=True, gap="small", vertical_alignment="center"):  # wraps onto a second line
-            pick = st.pills("Suggestions", FOLLOW_UPS[:4], key=f"sugg-{len(ss.chat)}", label_visibility="collapsed",
-                            width="stretch")
+        with st.container(horizontal=True, gap="small", vertical_alignment="center", key="followups"):  # wraps
+            pick = None
+            for k, s in enumerate(FOLLOW_UPS[:4]):
+                if st.button(s, key=f"sugg-{len(ss.chat)}-{k}"):
+                    pick = s
             with st.popover("More ideas"):
                 more = st.pills("More ideas", FOLLOW_UPS[4:], key=f"more-{len(ss.chat)}", label_visibility="collapsed")
         pick = pick or more
