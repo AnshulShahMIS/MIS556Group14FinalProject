@@ -20,16 +20,31 @@ showSidebarNavigation = false
 gatherUsageStats = false        # no telemetry to Streamlit
 
 [theme]
-# Clean, calm light theme: warm desert accent on white
-base = "light"
-primaryColor = "#B4532A"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F6F4F1"
-textColor = "#1F2328"
-font = "sans serif"
-baseRadius = "medium"
-borderColor = "#E7E2DA"
+# Trip-planner look: serif headings, rounded cards, terracotta accent. Light by default; visitors can switch to
+# dark with the "Dark mode" button at the top right (or the menu: Settings > theme).
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap, sans-serif"
+headingFont = "Fraunces:https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&display=swap, serif"
+baseRadius = "0.75rem"
 showWidgetBorder = true
 
-[theme.sidebar]
-backgroundColor = "#FAF8F5"
+[theme.light]
+primaryColor = "#B4532A"
+backgroundColor = "#FBF7F2"
+secondaryBackgroundColor = "#F5F0EA"
+textColor = "#2A2420"
+borderColor = "#EADFD3"
+linkColor = "#8A3E1F"
+
+[theme.light.sidebar]
+backgroundColor = "#FFFFFF"
+
+[theme.dark]
+primaryColor = "#E07A4B"
+backgroundColor = "#171412"
+secondaryBackgroundColor = "#2A2421"
+textColor = "#F3ECE4"
+borderColor = "#3A322D"
+linkColor = "#F0A27A"
+
+[theme.dark.sidebar]
+backgroundColor = "#1F1B18"

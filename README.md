@@ -98,24 +98,26 @@ Planner, the specialists' choices, the Concierge and Q&A use GPT-4o. The agent-t
 
 ## Using the app
 
-Six tabs along the top:
+Four pages along the top, laid out like a trip planner (warm light theme by default, with a **Dark mode** switch):
 
-| Tab | What it's for |
+| Page | What it's for |
 |---|---|
-| **Chat** (home) | Talk to the agents: describe your day, change anything ("make it cheaper", "swap dinner"), or ask questions ("reviews of Phoenix Zoo"). Tapping **Friends' day out, Family day, Date night** or **Game day** starts a short guided interview (where, when, who, what to plan incl. a hotel, interests, food & budget, extras) with tap-to-answer options, then plans from your answers. |
-| **Quick plan** | A short form (one or more cities, start and end dates on a calendar, how long, group, budget, interests, dinner, extras, getting around) and example trips, for people who'd rather not type. |
-| **Itinerary** | Your trip as a timeline (activities, meals, night out and **hotel**). Every stop has a **Reviews** panel: rating, star breakdown, what reviewers praise or complain about, and real review quotes. times, places, travel times, costs. Each stop has **Swap, Cheaper, Directions, Book/Save, Remove** and "Use this" for alternatives. A *Latest update* box and *Updated* tags show what changed, whether you changed it or someone in your shared group did. Budget, bookings & events and calendar / share downloads are underneath. |
-| **Map** | Every stop on a map, numbered in visiting order and colored by type (activity, food, night out), with the route between them and a directions button for each stop. |
+| **Plan** (home) | Before a trip exists: a *Where in Arizona?* start screen with a quick form (one or more cities, dates on a calendar, adults, kids, budget, and *More options* for interests, dinner, getting around and extras), idea buttons (**Friends' day out, Family day, Date night, Game day**) that start a short tap-to-answer interview, *Popular places to start*, and a chat box for typing the trip or asking questions. Once there's a trip: **chat on the left** (changes like "make it cheaper", questions like "reviews of Phoenix Zoo", quick follow-up buttons) and **your trip on the right**: a trip card (cities, dates, travelers, budget bar, weather, hotels, plan score, Share), day tabs (with the city for multi-city trips), a map of that day, and a card per stop with **Reserve / Tickets** (the form opens right under the stop) and a **⋯** menu (details and reviews, swap, cheaper option, directions, remove, closed for good). Underneath: **Budget, Bookings, Events, How it was planned**, then calendar / save-as-page / Google Maps route. |
+| **Map** | Every stop on a large map, numbered in visiting order and colored by type (activity, food, night out, stay), with the route between them and website, menu and directions buttons for each stop. |
 | **My trips** | Every trip you've planned. **New trip** keeps the old one here; **Open** brings it back to edit, **Delete** removes it. Kept across visits when *Remember me* is on. |
 | **Group** | Share the plan with a code, join a friend's plan, and vote on each stop together. |
 
-The top-right buttons are **OpenAI key** (use your own key for this session), **Preferences & privacy** (remembered
-preferences with name + PIN, favorites, live-data status, about) and **New trip**.
+The header shows which AI is planning (**AI Built In Planner**, or GPT-4o with a key) and the buttons **Dark mode /
+Light mode**, **OpenAI key** (use your own key for this session), **Preferences** (remembered preferences with name +
+PIN, favorites, live-data status, about) and **New trip**.
+
+The previous design is saved as the git tag `v1-classic-ui` (`git checkout v1-classic-ui -- app.py .streamlit/config.toml`
+brings it back).
 
 ## Live data (optional keys)
 
 Paste any of these into `.env` (copy `.env.example`). Each one switches on by itself; without it that
-feature uses the offline workbook data. **Preferences & privacy → Live data** shows which are on.
+feature uses the offline workbook data. **Preferences → Live information** shows which are on.
 
 | Key | What turns on | Where to get it | Cost |
 |---|---|---|---|

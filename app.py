@@ -1,12 +1,12 @@
 """Saguaro web app:  py -m streamlit run app.py
 
-Tabs along the top:
-  Chat        - talk to the agents: plan, change, ask questions (home screen)
-  Quick plan  - a short form for people who'd rather not type
-  Itinerary   - the trip as a timeline with one-click actions; always the latest version, with changes marked
-  Map         - every stop on the map, numbered in order, with the route
-  Group       - share a plan with a code and vote together
-The sidebar holds the OpenAI key, preferences & privacy, and "New trip".
+Pages along the top:
+  Plan      - start screen ("Where in Arizona?") until there's a trip; then chat on the left and the trip on the right
+              (trip card, day tabs, map, stops with Reserve and more actions, budget / bookings / events tabs)
+  Map       - every stop on a large map, numbered in order, with the route
+  My trips  - every trip you've planned
+  Group     - share a trip with a code and vote together
+The OpenAI key, Preferences and New trip buttons sit at the top right of every page.
 """
 from __future__ import annotations
 
@@ -29,17 +29,49 @@ st.set_page_config(page_title="Saguaro", page_icon=str(Path(__file__).parent / "
                    layout="wide")
 # Replace Streamlit's "running man" + Stop button (top right) with plain text: "Connecting..." while the page first
 # loads, "Working..." while the agents run later.
+def _dark_logo_uri() -> str:
+    import base64
+    return "data:image/png;base64," + base64.b64encode((Path(__file__).parent / "assets" / "wordmark-dark.png").read_bytes()).decode()
+
+
 st.html("""<style>
 [data-testid="stStatusWidget"] > * { display: none !important; }
 [data-testid="stStatusWidget"]::before {
   content: "%s"; font-size: 0.9rem; color: rgba(49, 51, 63, 0.75); padding: 0 0.5rem; white-space: nowrap;
   animation: az-pulse 1.4s ease-in-out infinite; }
 @keyframes az-pulse { 0%%, 100%% { opacity: 1; } 50%% { opacity: 0.45; } }
+/* trip-planner look: white cards on the sand background, a white header bar */
+[class*="st-key-card"], [data-testid="stForm"], [data-testid="stExpander"] details, [data-testid="stChatMessage"],
+[data-testid="stPopoverBody"] { background: #FFFFFF; }
+[class*="st-key-card"] { box-shadow: 0 1px 2px rgba(42, 36, 32, 0.04); }
+[data-testid="stHeader"] { background: #FFFFFF; border-bottom: 1px solid #EADFD3; }
+h1 { letter-spacing: -0.01em; }
+/* the agents' replies sit in a narrow chat column: smaller headings there */
+[data-testid="stChatMessage"] h1, [data-testid="stChatMessage"] h2, [data-testid="stChatMessage"] h3 { font-size: 1.2rem; }
+[data-testid="stChatMessage"] h4, [data-testid="stChatMessage"] h5 { font-size: 1.02rem; }
+/* the AI status and account buttons sit in the header bar, on the right (left of Streamlit's status text and menu) */
+@media (min-width: 1180px) {
+  .st-key-topbar { position: fixed; top: 0.2rem; right: 9.5rem; height: 3.75rem; width: auto !important; z-index: 1000001;
+    align-items: center; }
+  .st-key-topbar > div, .st-key-topbar [data-testid="stElementContainer"] { margin: 0 !important; }
+  .st-key-topbar [data-testid="stCaptionContainer"] { margin: 0 0.4rem 0 0; white-space: nowrap; }
+  .st-key-topbar [data-testid="stCaptionContainer"] p { margin: 0; }
+}
+.az-dark .st-key-theme_btn button p { font-size: 0; }
+.az-dark .st-key-theme_btn button p::after { content: "Light mode"; font-size: 0.875rem; }
+.az-dark .st-key-theme_btn [data-testid="stIconMaterial"] { font-size: 0; }
+.az-dark .st-key-theme_btn [data-testid="stIconMaterial"]::after { content: "light_mode"; font-size: 1.25rem; }
+/* dark mode: the same layout on warm charcoal */
+.az-dark [class*="st-key-card"], .az-dark [data-testid="stForm"], .az-dark [data-testid="stExpander"] details,
+.az-dark [data-testid="stChatMessage"], .az-dark [data-testid="stPopoverBody"] { background: #221D1A; }
+.az-dark [data-testid="stHeader"] { background: #1C1816; border-bottom-color: #3A322D; }
+.az-dark [data-testid="stStatusWidget"]::before { color: rgba(243, 236, 228, 0.7); }
+.az-dark img[data-testid="stHeaderLogo"] { content: url("%s"); }
 /* Streamlit Cloud's "Fork" / GitHub / share buttons in the app's top bar: not shown to visitors */
 [data-testid="stToolbarActions"] { display: none !important; }
 /* the zero-height helper frame below takes no space */
 [data-testid="stElementContainer"]:has(iframe[height="0"]), .element-container:has(iframe[height="0"]) { display: none; }
-</style>""" % ("Working..." if st.session_state.get("_ready") else "Connecting..."))
+</style>""" % ("Working..." if st.session_state.get("_ready") else "Connecting...", _dark_logo_uri()))
 # Streamlit Community Cloud wraps the app in its own page: it adds a "Hosted with Streamlit" badge and the creator's
 # profile picture for visitors, and shows Streamlit's tab icon until the app has started. That page is on the same
 # address as the app, so this script (run from inside the app) hides the two badges and puts the saguaro icon and
@@ -79,8 +111,36 @@ def _early_js() -> str:
             "attributeFilter:['href']});}}catch(e){}")
 
 
+# Light / dark theme. This code runs in the Streamlit app's own page (not in a component frame, whose code stops when
+# Streamlit replaces the frame):
+#  - __azPick('Light' | 'Dark') clicks Streamlit's own theme setting (menu > Light / Dark), which switches the look in
+#    place without reloading the page (a reload would start a new session and lose the trip);
+#  - a visitor who hasn't chosen yet (Streamlit stores "System") gets the light theme, even if the computer is dark;
+#  - while the dark theme shows, the page gets class az-dark, for the card colours and the switch's label above.
+THEME_SRC = (
+    "if(!window.__azPick){window.__azPick=async function(n){var D=document,"
+    "s=function(m){return new Promise(function(r){setTimeout(r,m)})};"
+    "var b=D.querySelector('[data-testid=\"stMainMenu\"] button, button[aria-label=\"Main menu\"]');if(!b)return;"
+    "var it=null;for(var i=0;i<20&&!it;i++){if(i%5===0)b.click();await s(120);"
+    "it=D.querySelector('[data-testid=\"stMainMenuItem-theme-'+n+'\"]');}"
+    "if(it){it.click();await s(150);}if(D.querySelector('[data-testid^=\"stMainMenuItem\"]'))b.click();};}"
+    "if(!window.__azTheme){window.__azTheme=1;var K='stActiveTheme-'+location.pathname+'-v2';"
+    "var v=localStorage.getItem(K);var first=!v||v==='\"System\"';if(first)localStorage.setItem(K,JSON.stringify('Light'));"
+    "setInterval(function(){var a=document.querySelector('.stApp');if(!a)return;"
+    "var m=getComputedStyle(a).backgroundColor.match(/[0-9]+/g);if(!m)return;var dark=(+m[0])+(+m[1])+(+m[2])<300;"
+    "document.documentElement.classList.toggle('az-dark',dark);"
+    "if(first&&document.querySelector('[data-testid=\"stMainMenu\"] button, button[aria-label=\"Main menu\"]')){"
+    "first=false;if(dark)window.__azPick('Light');}},300);}")
+
+
+def in_app_page(src: str) -> str:
+    """Script for a component frame that runs `src` in the Streamlit app's page (the frame's parent)."""
+    import json
+    return "try{window.parent.Function(" + json.dumps(src) + ")();}catch(e){}"
+
+
 EARLY_JS = _early_js()
-components.html(f"<script>{EARLY_JS}</script>", height=0)
+components.html(f"<script>{EARLY_JS}{in_app_page(THEME_SRC)}</script>", height=0)
 
 # Privacy: in embed mode (?embed=true) Streamlit Cloud never draws the creator's profile picture or the badge at all,
 # so a visitor who opens the plain link is sent to the embed version straight away. Only in the frame's first page
@@ -108,7 +168,7 @@ def _hide_badges_from_first_paint() -> str:
         html = (Path(st.__file__).parent / "static" / "index.html").read_text(encoding="utf-8")
         folder = Path(tempfile.gettempdir()) / "saguaro_static"
         folder.mkdir(exist_ok=True)
-        (folder / "index.html").write_text(html.replace("<head>", f"<head><script>{EMBED_REDIRECT_JS}{EARLY_JS}</script>", 1),
+        (folder / "index.html").write_text(html.replace("<head>", f"<head><script>{EMBED_REDIRECT_JS}{EARLY_JS}try{{{THEME_SRC}}}catch(e){{}}</script>", 1),
                                            encoding="utf-8")
         patched = 0
         for obj in gc.get_objects():
@@ -133,6 +193,7 @@ from azmulti.catalog import get_catalog  # noqa: E402
 from azmulti.changes import diff_plans, record  # noqa: E402
 from azmulti.graph import Planner  # noqa: E402
 from azmulti.hours import DAYS, fmt_time  # noqa: E402
+from azmulti.units import snip  # noqa: E402
 from azmulti.security import RateLimiter, clean_name, esc, redact, safe_url, sanitize_markdown, valid_key_format  # noqa: E402
 
 md = sanitize_markdown
@@ -198,6 +259,14 @@ if "planner" not in ss:
 
 
 # ================================================================== helpers
+_CARD = iter(range(10**9))
+
+
+def card():
+    """A white, rounded card (a bordered container; the key gives it the card style below)."""
+    return st.container(border=True, key=f"card{next(_CARD)}")
+
+
 def city_stays(legs):
     from azmulti.units import city_stays as _cs
     return _cs(legs)
@@ -284,7 +353,7 @@ def ask(prompt: str) -> dict | None:
 
 
 def act(prompt: str, done: str):
-    """One-click action from the Itinerary page: run it and stay on the page."""
+    """One-click action on the trip: run it and stay on the page."""
     with st.spinner("Updating your itinerary..."):
         out = ask(prompt)
     if out is not None:
@@ -306,8 +375,8 @@ def stars(p: dict) -> str:
 def goto(where: str | None):
     """Switch pages outside any form/column context."""
     if where:
-        st.switch_page({"itinerary": itinerary_page, "chat": chat_page, "plan": quick_page, "map": map_page,
-                        "trips": trips_page}[where])
+        st.switch_page({"itinerary": plan_page, "chat": plan_page, "plan": plan_page, "map": map_page,
+                        "trips": trips_page, "group": group_page}[where])
 
 
 @st.fragment(run_every=10)
@@ -320,7 +389,7 @@ def auto_sync():
         rec = shared.load(ss.planner.shared_code) or {}
         who = clean_name(rec.get("editor"))
         note_changes(before, plan_state(), who)
-        ss.chat.append({"role": "assistant", "content": f"**{who}** updated the shared plan. Open the **Itinerary** tab to see what changed."})
+        ss.chat.append({"role": "assistant", "content": f"**{who}** updated the shared plan. Changes are marked *Updated* on your trip."})
         st.toast(f"{who} updated the plan", icon=I["sync"])
         st.rerun(scope="app")
 
@@ -345,9 +414,7 @@ def compose_request(city, day: tuple, length, adults, kids, budget, interests, f
 
 def empty_state(text: str):
     st.info(text, icon=I["info"])
-    c = st.columns([1, 1, 3])
-    c[0].page_link(chat_page, label="Chat", icon=I["chat"])
-    c[1].page_link(quick_page, label="Quick plan", icon=I["form"])
+    st.page_link(plan_page, label="Plan a trip", icon=I["spark"])
 
 
 # ================================================================== dialogs
@@ -486,7 +553,7 @@ def render_reviews(p: dict):
     if quotes:
         st.caption(src)
         for stars_, when, text in quotes:
-            with st.container(border=True):
+            with card():
                 st.markdown(md(f"{'★' * int(stars_ or 0)}{'☆' * (5 - int(stars_ or 0))}  ·  {when or ''}"))
                 st.markdown(md(text[:400] + ("..." if len(text) > 400 else "")))
     if safe_url(p.get("url")):
@@ -494,80 +561,60 @@ def render_reviews(p: dict):
 
 
 def top_bar():
-    """Account actions at the top right of every page (replaces the sidebar)."""
-    left, b1, b2, b3 = st.columns([6, 1.15, 1.75, 1.1], vertical_alignment="center")
-    with left:
-        bits = []
-        if plan_state() and ss.unseen and nav.url_path != "itinerary":
-            st.page_link(itinerary_page, label=f"{ss.unseen} new update{'s' if ss.unseen > 1 else ''} to your itinerary", icon=I["info"])
-        else:
-            bits.append("AI: " + ("GPT-4o with your key" if ss.planner.has_api_key
-                                  else "GPT-4o (app key)" if os.getenv("OPENAI_API_KEY") and not REQUIRE_USER_KEY and os.getenv("AZ_OFFLINE", "0") != "1"
-                                  else "built-in planner"))
-            if ss.planner.shared_code:
-                bits.append(f"shared plan {ss.planner.shared_code}")
-            st.caption(" · ".join(bits))
-    if b1.button("OpenAI key", icon=I["key"], type="tertiary", use_container_width=True):
+    """The AI status and the account buttons, shown on the right of the header bar (next to Plan / Map / My trips /
+    Group); on narrow screens they drop to their own row under the header (see the .st-key-topbar style)."""
+    has_plan = bool(plan_state())
+    with st.container(horizontal=True, horizontal_alignment="right", vertical_alignment="center", gap="small",
+                      wrap=False, key="topbar"):
+        bits = ["AI " + ("GPT-4o With Your Key" if ss.planner.has_api_key
+                         else "GPT-4o (App Key)" if os.getenv("OPENAI_API_KEY") and not REQUIRE_USER_KEY and os.getenv("AZ_OFFLINE", "0") != "1"
+                         else "Built In Planner")]
+        if ss.planner.shared_code:
+            bits.append(f"shared trip {ss.planner.shared_code}")
+        st.caption(" · ".join(bits), width="content")
+        # one switch: it reads "Dark mode" in light mode and "Light mode" in dark mode (swapped by the az-dark style,
+        # so it is right even when the theme was changed from Streamlit's own menu)
+        if st.button("Dark mode", icon=":material/dark_mode:", type="tertiary", key="theme_btn",
+                     help="Switch between the light and dark look"):
+            ss["_theme_switch"] = ss.get("_theme_switch", 0) + 1
+        key_clicked = st.button("OpenAI key", icon=I["key"], type="tertiary")
+        prefs_clicked = st.button("Preferences", icon=I["prefs"], type="tertiary")
+        new_clicked = st.button("New trip", icon=I["new"], type="tertiary",
+                                help="Start a new trip - the current one is kept under My trips")
+    if ss.get("_theme_switch"):  # Streamlit's own theme setting (menu > Light / Dark), clicked for the visitor
+        components.html("<script>/*%d*/%s</script>" % (ss["_theme_switch"], in_app_page(
+            THEME_SRC + "window.__azPick(document.documentElement.classList.contains('az-dark')?'Light':'Dark');")), height=0)
+    if key_clicked:
         key_dialog()
-    elif b2.button("Preferences & privacy", icon=I["prefs"], type="tertiary", use_container_width=True):
+    elif prefs_clicked:
         prefs_dialog()
-    if b3.button("New trip", icon=I["new"], type="tertiary", use_container_width=True,
-                 help="Start a new trip - the current one is kept under My trips"):
-        had = bool(plan_state())
+    if new_clicked:
         ss.planner.reset()  # the current plan is saved to My trips first
         ss.chat, ss.votes, ss.changes, ss.changed_ids, ss.unseen, ss.updated_at = [], {}, [], set(), 0, None
-        if had:
+        ss.pop("day_pick", None)
+        if has_plan:
             st.toast("Your last trip is saved under My trips.", icon=I["check"])
-        ss["_goto"] = "chat"
+        ss["_goto"] = "plan"
 
 
-# ================================================================== pages
-def page_chat():
-    st_ = plan_state()
-    head = st.columns([4.4, 1.3, 1.3], vertical_alignment="bottom")
-    head[0].header("Chat with your trip planner")
-    iv_on = bool((ss.planner.state().get("interview") or {}).get("active"))
-    if not iv_on:
-        with head[1].popover("Trip dates", icon=I["calendar"], use_container_width=True):
-            cur = None
-            if st_ and (st_.get("conditions") or {}).get("date"):
-                d0 = date.fromisoformat(st_["conditions"]["date"])
-                cur = (d0, d0 + timedelta(days=(st_.get("request") or {}).get("days", 1) - 1))
-            rng = date_range_picker("chat_dates", default=cur or ss.get("pending_dates"))
-            if st_:
-                if st.button("Move my trip to these dates", type="primary", use_container_width=True, disabled=not rng):
-                    s_, e_ = rng
-                    with st.spinner("Re-planning for your dates..."):
-                        ask(f"change the dates to {s_.isoformat()}" + (f" to {e_.isoformat()}" if e_ != s_ else ""))
-                    st.rerun()
-            elif st.button("Use these dates", type="primary", use_container_width=True, disabled=not rng):
-                ss.pending_dates = rng
-                st.rerun()
-    if st_ and head[2].button("View itinerary", icon=I["itinerary"], type="primary", use_container_width=True):
-        ss["_goto"] = "itinerary"
-    if ss.get("pending_dates") and not st_:
-        s_, e_ = ss.pending_dates
-        st.info(f"Dates set: {s_:%a, %b} {s_.day}" + (f" to {e_:%a, %b} {e_.day}" if e_ != s_ else "")
-                + ". Now tell me where and what you'd like (or tap an idea below).", icon=I["calendar"])
-    if not ss.chat:
-        with st.chat_message("assistant", avatar=I["bot"]):
-            st.markdown("Hi, I'm **Saguaro**. Tell me about the day you want in Arizona - where, when, who's coming, "
-                        "your budget and what you enjoy - and I'll plan it with places, food, drive times and costs.")
-            st.markdown("Tap one of the ideas below and I'll ask a few quick questions, or just type what you want. "
-                        "You can also ask things like *best hikes near Sedona?* or *reviews of Phoenix Zoo*.")
-        st.page_link(quick_page, label="Prefer a form? Use Quick plan", icon=I["form"])
-    for i, m in enumerate(ss.chat):
-        with st.chat_message(m["role"], avatar=I["user"] if m["role"] == "user" else I["bot"]):
-            st.markdown(md(m["content"]))
-            if m.get("plan_changed") and i == len(ss.chat) - 1:
-                st.page_link(itinerary_page, label="Your itinerary was updated - open it", icon=I["itinerary"])
-            if m.get("trace"):
-                with st.expander("How the agents worked on this"):
-                    for t in m["trace"]:
-                        st.markdown(md(f"**{t['agent']}** - {t['did']}"))
+# ================================================================== chat (left side of the Plan page)
+def chat_messages(height: int | None = None):
+    """The conversation, newest at the bottom."""
+    box = st.container(height=height, border=False) if height else st.container()
+    with box:
+        for m in ss.chat:
+            with st.chat_message(m["role"], avatar=I["user"] if m["role"] == "user" else I["bot"]):
+                st.markdown(md(m["content"]))
+                if m.get("trace"):
+                    with st.expander("How the agents worked on this"):
+                        for t in m["trace"]:
+                            st.markdown(md(f"**{t['agent']}** - {t['did']}"))
+
+
+def pending_buttons(st_):
     pend = (st_ or {}).get("pending")
     if pend:
-        c1, c2, _ = st.columns([1.4, 1, 2])
+        c1, c2 = st.columns([1.4, 1])
         if c1.button(f"Yes, request {pend['name'][:28]}", icon=I["check"], type="primary", use_container_width=True):
             with st.spinner("Saving..."):
                 ask("yes")
@@ -575,105 +622,152 @@ def page_chat():
         if c2.button("No, cancel", use_container_width=True):
             ask("no")
             st.rerun()
+
+
+def question_card() -> dict | None:
+    """Guided questions: tap to answer (typing works too). Returns the open question, if any."""
     iv = ss.planner.state().get("interview") or {}
     q = iv.get("q") if iv.get("active") else None
-    if q:  # guided questions: tap to answer (typing works too)
-        with st.container(border=True):
-            st.caption(f"Question {q['step']} of {q['total']}")
-            if q["key"] == "when":  # pick exact dates on a calendar, or tap a quick option below
-                rng = date_range_picker(f"iv-cal-{len(ss.chat)}", "Pick your dates", default=ss.get("pending_dates"))
-                if st.button("Use these dates", key=f"iv-cal-go-{len(ss.chat)}", icon=I["calendar"], type="primary", disabled=not rng):
-                    ss.pending_dates = None
-                    with st.spinner("Got it..."):
-                        ask(dates_text(*rng))
-                    st.rerun()
-                st.caption("Or tap one:")
-            if q["multi"]:
-                sel = st.pills("Pick any", q["options"], selection_mode="multi", default=q.get("default") or None,
-                               key=f"iv-{len(ss.chat)}", label_visibility="collapsed")
-                c1, c2, c3 = st.columns([1.2, 1, 3])
-                if c1.button("Continue", icon=I["check"], type="primary", use_container_width=True):
-                    with st.spinner("Got it..."):
-                        ask(", ".join(sel) if sel else "skip")
-                    st.rerun()
-                if c2.button("Skip", use_container_width=True):
-                    ask("skip")
-                    st.rerun()
-            else:
-                pick = st.pills("Pick one", q["options"], key=f"iv-{len(ss.chat)}", label_visibility="collapsed")
-                if pick:
-                    with st.spinner("Planning your day..." if q["key"] == "confirm" else "Got it..."):
-                        ask(pick)
-                    st.rerun()
-            if st.button("Stop the questions and just plan it", type="tertiary"):
-                with st.spinner("Planning your day..."):
-                    ask("just plan it")
+    if not q:
+        return None
+    with card():
+        st.caption(f"Question {q['step']} of {q['total']}")
+        if q["key"] == "when":  # pick exact dates on a calendar, or tap a quick option below
+            rng = date_range_picker(f"iv-cal-{len(ss.chat)}", "Pick your dates", default=ss.get("pending_dates"))
+            if st.button("Use these dates", key=f"iv-cal-go-{len(ss.chat)}", icon=I["calendar"], type="primary", disabled=not rng):
+                ss.pending_dates = None
+                with st.spinner("Got it..."):
+                    ask(dates_text(*rng))
                 st.rerun()
-    else:
-        sugg = FOLLOW_UPS if st_ else [t for t, _ in EXAMPLES] + list(QUICK)
-        pick = st.pills("Suggestions", sugg, key=f"sugg-{len(ss.chat)}", label_visibility="collapsed")
-        if pick:
-            with st.spinner("Working on it..."):
-                ask(QUICK.get(pick, pick))  # a scenario title starts the guided questions
+            st.caption("Or tap one:")
+        if q["multi"]:
+            sel = st.pills("Pick any", q["options"], selection_mode="multi", default=q.get("default") or None,
+                           key=f"iv-{len(ss.chat)}", label_visibility="collapsed")
+            c1, c2, _ = st.columns([1.2, 1, 2])
+            if c1.button("Continue", icon=I["check"], type="primary", use_container_width=True):
+                with st.spinner("Got it..."):
+                    ask(", ".join(sel) if sel else "skip")
+                st.rerun()
+            if c2.button("Skip", use_container_width=True):
+                ask("skip")
+                st.rerun()
+        else:
+            pick = st.pills("Pick one", q["options"], key=f"iv-{len(ss.chat)}", label_visibility="collapsed")
+            if pick:
+                with st.spinner("Planning your trip..." if q["key"] == "confirm" else "Got it..."):
+                    ask(pick)
+                st.rerun()
+        if st.button("Stop the questions and just plan it", type="tertiary"):
+            with st.spinner("Planning your trip..."):
+                ask("just plan it")
             st.rerun()
-    prompt = st.chat_input("Type your answer..." if q else "Describe your day, or ask for a change...")
+    return q
+
+
+def chat_box(q: dict | None, placeholder: str):
+    prompt = st.chat_input("Type your answer..." if q else placeholder)
     if prompt:
         with st.spinner("Your agents are working..."):
             ask(prompt)
         st.rerun()
 
 
-def page_quick():
-    st_ = plan_state()
-    st.header("Quick plan")
-    if st_:
-        st.caption(f"You already have a trip for {(st_.get('request') or {}).get('city', '')}. Planning here starts a new one; "
-                   "to adjust the current trip, use the Itinerary or Chat tab.")
-    else:
-        st.caption("Fill in what you know - everything is optional except where and when.")
-    left, right = st.columns([3, 2], gap="large")
-    with left, st.form("quick_plan", border=True):
-        c1, c2 = st.columns(2)
-        city = c1.multiselect("Where (one city, or several in visiting order)", CITIES, default=[CITIES[1]], max_selections=6,
-                              help="Pick several cities for a road trip - the days are shared between them in the order you pick")
-        nxt_sat = date.today() + timedelta(days=(5 - date.today().weekday()) % 7 or 7)
-        with c2:
-            rng = date_range_picker("qp_dates", "Dates (start - end)", default=(nxt_sat, nxt_sat), summary=False)
-        length = st.segmented_control("Each day", ["Full day", "Morning", "Afternoon", "Evening"], default="Full day")
-        c1, c2, c3 = st.columns(3)
-        adults = c1.number_input("Adults", 1, 20, 2)
-        kids = c2.number_input("Kids", 0, 10, 0)
-        budget = c3.number_input("Budget per person ($)", 0, 1000, 100, step=10, help="0 means no budget")
-        interests = st.pills("Interests", list(INTERESTS), selection_mode="multi", default=["Hiking & outdoors"])
-        food = st.selectbox("Dinner", FOODS)
-        transport = st.segmented_control("Getting around", ["Car", "Rideshare", "Walking", "Transit"], default="Car")
-        extras = st.pills("Extras", list(EXTRAS), selection_mode="multi")
-        if st.form_submit_button("Plan my day", icon=I["spark"], type="primary", use_container_width=True):
-            if not city:
-                st.error("Pick at least one city.", icon=I["warn"])
-            elif not rng:
-                st.error(f"Pick a start and end date (up to {MAX_DAYS} days).", icon=I["warn"])
-            elif len(city) > (rng[1] - rng[0]).days + 1:
-                st.error(f"You picked {len(city)} cities - choose at least {len(city)} days so each city gets a day.", icon=I["warn"])
-            else:
-                ss["_plan_next"] = compose_request(city, rng, length or "Full day", int(adults), int(kids), int(budget),
-                                                   interests or [], food, extras or [], transport or "Car")
-                ss["_goto"] = "itinerary"
-    with right:
-        st.markdown("**Or start from an example**")
-        for title, text in EXAMPLES:
-            with st.container(border=True):
-                st.markdown(f"**{title}**")
-                st.caption(text)
-                if st.button("Plan this", key=f"ex-{title}", use_container_width=True):
-                    ss["_plan_next"] = text
-                    ss["_goto"] = "itinerary"
+def chat_panel(st_):
+    """Left side of the planning screen: the conversation, quick follow-ups and the message box."""
+    st.markdown("#### Chat with Saguaro")
+    chat_messages(height=430)
+    pending_buttons(st_)
+    q = question_card()
+    if not q:
+        pick = st.pills("Suggestions", FOLLOW_UPS, key=f"sugg-{len(ss.chat)}", label_visibility="collapsed")
+        if pick:
+            with st.spinner("Working on it..."):
+                ask(pick)
+            st.rerun()
+    chat_box(q, "Ask for a change or a new trip...")
 
 
+# ================================================================== start screen (no trip yet)
+POPULAR = [("Phoenix", "Phoenix", "Sunrise hikes, museums"), ("Sedona", "Sedona", "Red rocks, vortexes"),
+           ("Grand Canyon", "Grand Canyon Village", "Rim views, trails"), ("Tucson", "Tucson", "Saguaros, street tacos")]
+
+
+def start_view():
+    if ss.chat:  # a conversation is under way (guided questions or a question): show it front and centre
+        _, mid, _ = st.columns([1, 3, 1])
+        with mid:
+            st.title("Let's plan your trip", anchor=False)
+            chat_messages()
+            pending_buttons(None)
+            q = question_card()
+            if not q:
+                pick = st.pills("Ideas", [t for t, _ in EXAMPLES] + list(QUICK), key=f"sugg-{len(ss.chat)}",
+                                label_visibility="collapsed")
+                if pick:
+                    with st.spinner("Working on it..."):
+                        ask(QUICK.get(pick, pick))
+                    st.rerun()
+        chat_box(q, "Describe your trip, or ask anything...")
+        return
+
+    _, mid, _ = st.columns([0.5, 5, 0.5])
+    with mid:
+        st.markdown("<div style='height:1.2rem'></div>", unsafe_allow_html=True)
+        st.title("Where in Arizona?", anchor=False)
+        st.markdown("Tell me the plan, or tap an idea and I'll ask a few quick questions.")
+        with st.form("start_form", border=True):
+            c = st.columns([2.3, 1.9, 0.8, 0.8, 1.1], vertical_alignment="bottom")
+            city = c[0].multiselect("Where", CITIES, key="qp_city", max_selections=6, placeholder="Pick a city (or several)",
+                                    help="Pick several cities for a road trip - the days are shared between them in the order you pick")
+            with c[1]:
+                rng = date_range_picker("qp_dates", "When", summary=False)
+            adults = c[2].number_input("Adults", 1, 20, 2)
+            kids = c[3].number_input("Kids", 0, 10, 0)
+            budget = c[4].number_input("Budget each ($)", 0, 1000, 100, step=10, help="0 means no budget")
+            with st.expander("More options: interests, food, getting around"):
+                length = st.segmented_control("Each day", ["Full day", "Morning", "Afternoon", "Evening"], default="Full day")
+                interests = st.pills("Interests", list(INTERESTS), selection_mode="multi")
+                o = st.columns(2)
+                food = o[0].selectbox("Dinner", FOODS)
+                with o[1]:
+                    transport = st.segmented_control("Getting around", ["Car", "Rideshare", "Walking", "Transit"], default="Car")
+                extras = st.pills("Extras", list(EXTRAS), selection_mode="multi")
+            if st.form_submit_button("Plan my trip", icon=":material/search:", type="primary", use_container_width=True):
+                if not city:
+                    st.error("Pick at least one city.", icon=I["warn"])
+                elif not rng:
+                    st.error(f"Pick a start and end date (up to {MAX_DAYS} days).", icon=I["warn"])
+                elif len(city) > (rng[1] - rng[0]).days + 1:
+                    st.error(f"You picked {len(city)} cities - choose at least {len(city)} days so each city gets a day.", icon=I["warn"])
+                else:
+                    ss["_plan_next"] = compose_request(city, rng, length or "Full day", int(adults), int(kids), int(budget),
+                                                       interests or [], food, extras or [], transport or "Car")
+                    st.rerun()
+        pick = st.pills("Ideas", [t for t, _ in EXAMPLES] + list(QUICK), key="ideas", label_visibility="collapsed")
+        if pick:
+            with st.spinner("Working on it..."):
+                ask(QUICK.get(pick, pick))  # a scenario title starts the guided questions
+            st.rerun()
+
+        st.subheader("Popular places to start", anchor=False)
+        cols = st.columns(4)
+        for col, (label, city_name, blurb) in zip(cols, POPULAR):
+            with col, card():
+                st.markdown(f"**{label}**")
+                st.caption(blurb)
+                if st.button("Start here", key=f"pop-{label}", use_container_width=True):
+                    ss["qp_city"] = [city_name]
+                    st.rerun()
+        if ss.planner.trips:
+            st.page_link(trips_page, label=f"Your saved trips ({len(ss.planner.trips)})", icon=I["trips"])
+    chat_box(None, "Or just tell me: 3 days in Sedona for 2, hiking and Italian food...")
+
+
+# ================================================================== the trip (right side of the Plan page)
 def reservation_panel(pnd: dict):
     """The reservation request form, shown right under the stop it's for."""
     hotel = pnd["kind"] == "lodging"
-    with st.container(border=True):
+    with card():
         what = {"lodging": "Reserve a room at", "attraction": "Get tickets for"}.get(pnd["kind"], "Reserve a table at")
         st.markdown(md(f"**{what} {pnd['name']}**"))
         st.caption(f"{pnd.get('date', '')} · check the details, then send the request. Nothing is booked or paid until you "
@@ -696,89 +790,245 @@ def reservation_panel(pnd: dict):
             act("no", "Cancelled - nothing was booked")
 
 
-def page_itinerary():
-    if ss.get("_plan_next"):  # a plan requested from Quick plan: build it here, then show it
-        with st.spinner("Your agents are planning your day..."):
-            ask(ss.pop("_plan_next"))
-        st.rerun()
-    st_ = plan_state()
-    if not st_:
-        st.header("Itinerary")
-        empty_state("No trip yet. Plan one in Chat or Quick plan - it appears here and updates automatically "
-                    "whenever you or your group change it.")
+@st.dialog("Stop details", width="large")
+def stop_dialog(n: int, s: dict):
+    """Everything about one stop: reviews, hours, links, other options and feedback."""
+    p = s["place"]
+    name = f"[{p['name']}]({safe_url(p.get('url'))})" if safe_url(p.get("url")) else p["name"]
+    st.markdown(md(f"### {name}"))
+    st.caption(md(f"{s.get('time', '')} · {KIND.get(s['kind'], ('Stop',))[0]} · {p.get('primary_category', '')} · "
+                  f"{p.get('city', '')} · {'$' + format(s['cost_pp'], '.0f') + ' per person' if s.get('cost_pp') else 'Free'}"))
+    if s.get("reason"):
+        st.markdown(md(s["reason"]))
+    t_rev, t_info, t_alt = st.tabs([f"Reviews · {(p.get('rating') or 0):.1f}★", "Details and booking", "Other options"])
+    with t_rev:
+        render_reviews(p)
+    with t_info:
+        lv = p.get("live") or {}
+        if lv.get("checked"):
+            st.caption(md(f"Checked live (Google, {lv['checked']}): {'open' if lv.get('status') == 'OPERATIONAL' else lv.get('status')}"
+                          + (f" · hours that day {s.get('hours_that_day')}" if s.get("hours_that_day") else "")
+                          + (f" · parking: {', '.join(lv['parking'])}" if lv.get("parking") else "")
+                          + (f" · {lv['phone']}" if lv.get("phone") else "")))
+        elif s.get("hours_that_day"):
+            st.caption(md(f"Hours that day (2021 data): {s['hours_that_day']}"))
+        if p.get("ev_love"):
+            st.markdown(md(f"**Travelers love:** {p['ev_love']}  \n**Watch out for:** {p.get('ev_complaints') or '-'}  \n"
+                           f"**Tip:** {p.get('ev_tip') or '-'}  \n*TripAdvisor summary*"))
+        if p.get("menu_highlights"):
+            st.caption(md(f"Menu highlights: {p['menu_highlights'][:200]}"))
+        bk = s.get("booking") or {}
+        if bk.get("advice"):
+            st.caption(md(bk["advice"]) + " Nothing is booked without your OK.")
+        web = web_links(p, s["kind"])
+        links = {**{k: v for k, v in web.items()}, **{k: v for k, v in (bk.get("links") or {}).items()}}
+        btn = [(k, safe_url(v)) for k, v in links.items() if safe_url(v)]
+        if btn:
+            cols = st.columns(min(4, len(btn)))
+            for i, (k, u) in enumerate(btn[:8]):
+                cols[i % len(cols)].link_button(k, u, use_container_width=True)
+    with t_alt:
+        alts = s.get("alternatives") or []
+        if not alts:
+            st.caption("No other options for this stop. Use Swap to look for a different place.")
+        for k, alt in enumerate(alts[:3], 1):
+            cc = st.columns([5, 1.3], vertical_alignment="center")
+            cc[0].markdown(md(f"**{alt['name']}** · {I['star']} {(alt.get('rating') or 0):.1f} · ~${alt.get('cost_pp') or 0:.0f} per person"))
+            if cc[1].button("Use this", key=f"alt{n}-{k}", use_container_width=True):
+                act(f"use option {k} for stop {n}", f"Stop {n} is now {alt['name']}")
+    st.divider()
+    f1, f2, f3, _ = st.columns([1.2, 1.1, 1, 1.2])
+    if f1.button("More like this", key=f"up{n}", icon=I["up"], use_container_width=True):
+        ss.planner.feedback(p, +1)
+        st.toast("Noted - I'll favor places like this.", icon=I["check"])
+    if f2.button("Not for us", key=f"dn{n}", icon=I["down"], use_container_width=True):
+        act(f"we don't like stop {n}", "Replaced and noted for next time")
+    if f3.button("Save", key=f"sv{n}", icon=I["save"], use_container_width=True):
+        act(f"save stop {n}", "Saved to favorites")
+
+
+def trip_map(stops_n: list, height: int = 280):
+    """Numbered stops with the route between them, coloured by kind."""
+    rows = []
+    for n, s in stops_n:
+        p = s["place"]
+        label, color = KIND.get(s["kind"], ("Stop", [80, 80, 80]))
+        rows.append({"n": str(n), "name": p["name"], "lat": p["lat"], "lon": p["lon"], "day": s["day"],
+                     "time": (s.get("time") or "").split(" - ")[0], "kind": label, "color": color})
+    if not rows:
         return
+    pts = pd.DataFrame(rows)
+    span = max(pts.lat.max() - pts.lat.min(), (pts.lon.max() - pts.lon.min()) * 0.8, 0.01)
+    zoom = 13 if span < 0.03 else 12 if span < 0.06 else 11 if span < 0.12 else 10 if span < 0.25 else 9 if span < 0.5 else 8 if span < 1.2 else 7
+    paths = [{"path": [[r.lon, r.lat] for r in pts[pts.day == d].itertuples()]} for d in pts.day.unique()]
+    st.pydeck_chart(pdk.Deck(
+        map_style="light",
+        initial_view_state=pdk.ViewState(latitude=float(pts.lat.mean()), longitude=float(pts.lon.mean()), zoom=zoom),
+        layers=[
+            pdk.Layer("PathLayer", paths, get_path="path", get_color=[60, 60, 60, 140], width_min_pixels=3),
+            pdk.Layer("ScatterplotLayer", pts, get_position="[lon, lat]", get_fill_color="color", get_radius=60,
+                      radius_min_pixels=13, radius_max_pixels=18, stroked=True, get_line_color=[255, 255, 255],
+                      line_width_min_pixels=2, pickable=True),
+            pdk.Layer("TextLayer", pts, get_position="[lon, lat]", get_text="n", get_size=13,
+                      get_color=[255, 255, 255], font_weight=700, get_alignment_baseline="'center'"),
+        ],
+        tooltip={"html": "<b>{n}. {name}</b><br/>{time} · {kind}", "style": {"fontSize": "13px"}}),
+        height=height)
+
+
+def stop_card(n: int, s: dict, st_: dict, res_by: dict, nstops: int):
+    p = s["place"]
+    with card():
+        c = st.columns([1.05, 5, 1.35, 0.55], vertical_alignment="center")
+        start, _, end = (s.get("time") or "").partition(" - ")
+        c[0].markdown(f"**{start}**")
+        if end:
+            c[0].caption(f"to {end}")
+        kind_label = KIND.get(s["kind"], ("Stop", None))[0]
+        badges = []
+        if s["id"] in ss.changed_ids:
+            badges.append(":blue-badge[Updated]")
+        if s.get("open_ok") is False:
+            badges.append(":orange-badge[Check hours]")
+        if p["id"] in res_by:
+            badges.append(":green-badge[Booked]" if res_by[p["id"]]["status"] == "booked" else ":violet-badge[Reservation requested]")
+        c[1].markdown(md(f"**{n}. {p['name']}** " + " ".join(badges)))
+        cost = f"~${s['cost_pp']:.0f}" + (" a night" if s["kind"] == "lodging" else "") if s.get("cost_pp") else "free"
+        c[1].caption(md(f"{s['label']} · {kind_label} · {(p.get('rating') or 0):.1f}★ ({int(p.get('n_reviews') or 0):,}) · {cost}"
+                        + (f" · {p.get('city')}" if p.get("city") else "")))
+        if s.get("reason"):
+            c[1].caption(md(snip(s["reason"], 140)))
+        bookable = s["kind"] != "attraction" or s.get("cost_pp")
+        if bookable:
+            if c[2].button("Tickets" if s["kind"] == "attraction" else "Reserve", key=f"bk{n}", type="primary",
+                           use_container_width=True,
+                           help={"lodging": "Reserve a room", "attraction": "Get tickets or book a tour"}.get(s["kind"], "Reserve a table")):
+                act(f"book stop {n}", "Request ready - check the details under this stop")
+        elif c[2].button("Details", key=f"dt{n}", use_container_width=True):
+            stop_dialog(n, s)
+        with c[3].popover("", icon=":material/more_horiz:", use_container_width=True, help="More actions"):
+            if bookable and st.button("Details and reviews", key=f"dt{n}", icon=I["star"], use_container_width=True):
+                stop_dialog(n, s)
+            if st.button("Swap for another place", key=f"sw{n}", icon=I["swap"], use_container_width=True):
+                act(f"replace stop {n}", f"Swapped stop {n}")
+            if st.button("Find a cheaper option", key=f"ch{n}", icon=I["cheaper"], use_container_width=True, disabled=not s.get("cost_pp")):
+                act(f"make stop {n} cheaper", f"Found a cheaper option for stop {n}")
+            directions = (s.get("booking") or {}).get("links", {}).get("Directions")
+            if safe_url(directions):
+                st.link_button("Directions", safe_url(directions), icon=I["directions"], use_container_width=True)
+            if st.button("Remove this stop", key=f"rm{n}", icon=I["remove"], use_container_width=True, disabled=nstops <= 1):
+                act(f"remove stop {n}", f"Removed stop {n}")
+            if st.button("Closed for good? Replace it", key=f"cl{n}", icon=I["warn"], use_container_width=True,
+                         help="If this place has shut down, I'll replace it and never recommend it again"):
+                act(f"stop {n} is permanently closed", f"Replaced stop {n} - it won't be recommended again")
+        if (st_.get("pending") or {}).get("slot_id") == s["id"]:
+            reservation_panel(st_["pending"])  # right under this place
+
+
+def trip_panel(st_: dict):
+    """Right side of the planning screen: the trip card, the day's stops, the map and the trip details."""
     req, cond, b, q = st_.get("request") or {}, st_.get("conditions") or {}, st_.get("budget") or {}, st_.get("quality") or {}
     stops = [s for s in st_["slots"] if s.get("place")]
-    day_txt = (datetime.fromisoformat(cond["date"]).strftime("%A, %B %d") if cond.get("date")
-               else DAYS[req["weekday"]] if req.get("weekday") is not None else "")
     first = datetime.fromisoformat(cond["date"]) if cond.get("date") else None
-    if first and req.get("days", 1) > 1:
-        last = first + timedelta(days=req["days"] - 1)
-        day_txt = f"{first:%a, %b} {first.day} - {last:%a, %b} {last.day}"
-    head = st.columns([5, 1.3])
-    head[0].header(f"{' → '.join(lg['city'] for lg in req.get('legs') or []) or req.get('city', '')} · {day_txt}")
-    head[0].caption(" · ".join(x for x in [
-        f"{req.get('party_size', 2)} {'people' if req.get('party_size', 2) > 1 else 'person'}",
-        f"{req['days']} days" if req.get("days", 1) > 1 else "",
-        f"shared plan {ss.planner.shared_code}" if ss.planner.shared_code else "",
-        f"updated {ago(ss.updated_at)}" if ss.updated_at else ""] if x))
-    if head[1].button("Change something", icon=I["chat"], use_container_width=True):
-        ss["_goto"] = "chat"
-
-    m = st.columns(5, border=True)
+    ndays = req.get("days", 1)
+    day_txt = (f"{first:%a, %b} {first.day}" if first else DAYS[req["weekday"]] if req.get("weekday") is not None else "")
+    if first and ndays > 1:
+        last = first + timedelta(days=ndays - 1)
+        day_txt += f" – {last:%a, %b} {last.day}"
+    title = " → ".join(lg["city"] for lg in req.get("legs") or []) or req.get("city", "")
     by_day = (cond or {}).get("by_day") or {}
-    if by_day:  # multi-city: the range across the trip; each day's weather is under its heading
-        highs = [v["high_f"] for v in by_day.values()]
-        m[0].metric("Weather", f"{min(highs)}-{max(highs)}°F" if min(highs) != max(highs) else f"{highs[0]}°F",
-                    help="Daytime highs across your cities - see each day below")
-        m[1].metric("Sunset", fmt_time(cond["sunset"]), help="On day 1 - each day's sunset is under its heading")
-    elif cond:
-        m[0].metric("Weather", f"{cond.get('high_f')}°F", help=cond.get("source"))
-        m[1].metric("Sunset", fmt_time(cond["sunset"]))
-    if b:
-        delta = (f"${b['budget_pp'] - b['total_pp']:.0f} under budget" if b.get("budget_pp") and b["total_pp"] <= b["budget_pp"]
-                 else f"${b['total_pp'] - b['budget_pp']:.0f} over budget" if b.get("budget_pp") else None)
-        m[2].metric("Per person", f"${b['total_pp']:.0f}", delta, delta_color="normal" if delta and "under" in delta else "inverse")
-    m[3].metric("Travel time", f"{(st_.get('route') or {}).get('minutes', 0)} min")
-    m[4].metric("Plan score", f"{q.get('total', 0):.0f}/100", help="Budget fit, match to what you asked, travel efficiency and opening hours.")
+
+    with card():
+        h = st.columns([5, 1], vertical_alignment="center")
+        h[0].header(title, anchor=False)
+        if h[1].button("Share", icon=I["share"], use_container_width=True, help="Plan together: share this trip with a code"):
+            ss["_goto"] = "group"
+        st.caption(" · ".join(x for x in [
+            day_txt, f"{req.get('party_size', 2)} {'travelers' if req.get('party_size', 2) > 1 else 'traveler'}",
+            f"{ndays} days" if ndays > 1 else "",
+            f"updated {ago(ss.updated_at)}" if ss.updated_at else ""] if x))
+        if b and b.get("budget_pp"):
+            st.progress(min(1.0, b["total_pp"] / b["budget_pp"]),
+                        text=f"${b['total_pp']:.0f} of ${b['budget_pp']:.0f} per person"
+                             + (f" · ${b['total_pp'] - b['budget_pp']:.0f} over" if b["total_pp"] > b["budget_pp"] else ""))
+        elif b:
+            st.caption(f"About ${b['total_pp']:.0f} per person")
+        chips = []
+        if by_day:
+            seen = {}
+            for v in by_day.values():
+                seen.setdefault(v["city"], v["high_f"])
+            chips += [f":orange-badge[{c} · {h}°F]" for c, h in seen.items()]
+        elif cond.get("high_f"):
+            chips.append(f":orange-badge[{req.get('city', '')} · {cond['high_f']}°F · sunset {fmt_time(cond['sunset'])}]")
+        hotels = sum(1 for s in stops if s["kind"] == "lodging")
+        if hotels:
+            chips.append(f":green-badge[{hotels} hotel night{'s' if hotels > 1 else ''}]")
+        chips.append(f":gray-badge[Travel {(st_.get('route') or {}).get('minutes', 0)} min]")
+        chips.append(f":violet-badge[Plan score {q.get('total', 0):.0f}/100]")
+        st.markdown(" ".join(chips), help="Plan score: budget fit, match to what you asked, travel efficiency and opening hours.")
     for a in cond.get("alerts", []):
         st.warning(a, icon=I["warn"])
 
     if ss.changes:
         last = ss.changes[-1]
-        with st.container(border=True):
-            st.markdown(md(f":blue-badge[Latest update] by {last['who']} · {ago(last['t'])}"))
+        with st.expander(f"Latest update by {last['who']} · {ago(last['t'])}", expanded=bool(ss.unseen)):
             for line in last["what"][:6]:
                 st.markdown(md(f"- {line}"))
-            if len(ss.changes) > 1:
-                with st.expander(f"All changes ({len(ss.changes)})"):
-                    for c in reversed(ss.changes):
-                        st.markdown(md(f"**{c['who']}** · {ago(c['t'])}: " + "; ".join(c["what"][:4])))
+            for c in reversed(ss.changes[:-1]):
+                st.caption(md(f"**{c['who']}** · {ago(c['t'])}: " + "; ".join(c["what"][:4])))
+        ss.unseen = 0
+
+    # ---- which day to show
+    stays = city_stays(req.get("legs"))  # multi-city: {first day: (city, days)}
+    days = sorted({s["day"] for s in stops})
+    pick = days[0] if days else 1
+    if len(days) > 1:
+        city_at = {}
+        cur = None
+        for d in days:
+            if d in stays:
+                cur = stays[d][0]
+                city_at[d] = f"Day {d} · {cur}"
+            else:
+                city_at[d] = f"Day {d}"
+        opts = ["All days"] + [city_at[d] for d in days]
+        if ss.get("day_pick") not in opts:
+            ss["day_pick"] = opts[1]
+        sel = st.segmented_control("Day", opts, key="day_pick", label_visibility="collapsed") or opts[1]
+        pick = None if sel == "All days" else int(sel.split()[1].strip("·"))
+    numbered = list(enumerate(stops, 1))
+    shown = [(n, s) for n, s in numbered if pick is None or s["day"] == pick]
+
+    trip_map(shown, height=260)
+    route_bits = sum(s.get("drive_km") or 0 for _, s in shown)
+    mins = sum(s.get("drive_min") or 0 for n, s in shown if n > 1)
+    m = st.columns([3, 1.3], vertical_alignment="center")
+    m[0].caption(f"{'Whole trip' if pick is None else f'Day {pick}'} route · {dist(route_bits)} · about {mins} min of travel  ·  "
+                 + "   ".join(f":{c}-badge[{k}]" for k, c in (("Activity", "blue"), ("Food", "orange"), ("Night out", "violet"), ("Stay", "green"))))
+    if m[1].button("Full map", icon=I["map"], use_container_width=True):
+        ss["_goto"] = "map"
 
     res_by = {r["place_id"]: r for r in st_.get("reservations") or []}
+    shown_ids = {s["id"] for _, s in shown}
     cur_day = None
-    shown_ids = {x['id'] for x in stops}
-    stays = city_stays(req.get("legs"))  # multi-city: where each city's section starts
-    for n, s in enumerate(stops, 1):
-        p = s["place"]
-        if req.get("days", 1) > 1 and s["day"] != cur_day:
+    for n, s in shown:
+        if s["day"] != cur_day and ndays > 1:
             cur_day = s["day"]
             stay = stays.get(cur_day)
-            if stay:  # multi-city: a section per city, with its days under it
-                city, ndays = stay
-                if cur_day > 1:
-                    st.divider()
+            if stay and (pick is None or len(stays) > 1):  # multi-city: the city, its days and dates
+                city, cdays = stay
                 span = ""
                 if first:
-                    d0, d1 = first + timedelta(days=cur_day - 1), first + timedelta(days=cur_day + ndays - 2)
-                    span = f"{d0:%a, %b} {d0.day}" + (f" – {d1:%a, %b} {d1.day}" if ndays > 1 else "")
-                st.header(f"{city} · {ndays} day{'s' if ndays > 1 else ''}", anchor=False)
+                    d0, d1 = first + timedelta(days=cur_day - 1), first + timedelta(days=cur_day + cdays - 2)
+                    span = f" · {d0:%a, %b} {d0.day}" + (f" – {d1:%a, %b} {d1.day}" if cdays > 1 else "")
+                st.subheader(f"{city} · {cdays} day{'s' if cdays > 1 else ''}", anchor=False)
                 if span:
-                    st.caption(span)
-            st.subheader(f"Day {cur_day}" + (f" · {first + timedelta(days=cur_day - 1):%A, %B} "
-                                              f"{(first + timedelta(days=cur_day - 1)).day}" if first else ""), anchor=False)
+                    st.caption(span.strip(" ·"))
+            st.markdown(f"**Day {cur_day}" + (f" · {first + timedelta(days=cur_day - 1):%A, %B} "
+                                              f"{(first + timedelta(days=cur_day - 1)).day}**" if first else "**"))
             wx = by_day.get(cur_day) or by_day.get(str(cur_day))
-            if wx:  # that day's weather in that day's city
+            if wx:
                 st.caption(md(f"{wx['city']}: high **{wx['high_f']}°F**"
                               + (f" · {wx['rain_pct']}% chance of rain" if wx.get("rain_pct") else "")
                               + f" · sunrise {fmt_time(wx['sunrise'])} · sunset {fmt_time(wx['sunset'])}"
@@ -789,102 +1039,24 @@ def page_itinerary():
                 tr = s["transfer"]
                 st.info(f"Travel day: about {tr['min'] // 60} h {tr['min'] % 60:02d} min ({dist(tr['km'])}) from {tr['from']} "
                         f"to {tr['to']}. Leave around {fmt_time(max(420, s.get('start', 540) - tr['min']))}.", icon=I["route"])
-        if s.get("drive_min") and n > 1:
+        if s.get("drive_min") and n > 1 and not s.get("transfer"):
             traffic = f" · includes {s['traffic']['delay_min']} min traffic" if (s.get("traffic") or {}).get("delay_min") else ""
             st.caption(f":material/more_vert: {s['drive_min']} min {MODE.get(req.get('transport', 'car'), 'drive')} · {dist(s.get('drive_km'))}{traffic}")
-        with st.container(border=True):
-            c = st.columns([1.1, 5, 1.2])
-            start, _, end = (s.get("time") or "").partition(" - ")
-            c[0].markdown(f"**{start}**")
-            if end:
-                c[0].caption(f"to {end}")
-            kind_label = KIND.get(s["kind"], ("Stop", None))[0]
-            badges = [f":gray-badge[{s['label']}]"]
-            if s["id"] in ss.changed_ids:
-                badges.append(":blue-badge[Updated]")
-            if s.get("open_ok") is True:
-                badges.append(":green-badge[Open then]")
-            elif s.get("open_ok") is False:
-                badges.append(":orange-badge[Check hours]")
-            if p["id"] in res_by:
-                badges.append(":green-badge[Booked]" if res_by[p["id"]]["status"] == "booked" else ":violet-badge[Reservation requested]")
-            name = f"[{p['name']}]({safe_url(p.get('url'))})" if safe_url(p.get("url")) else p["name"]
-            c[1].markdown(md(f"#### {name}"))
-            c[1].markdown(md(" ".join(badges)))
-            c[1].caption(md(f"{kind_label} · {p.get('primary_category', '')} · {p.get('city', '')} · {stars(p)}"))
-            if s.get("reason"):
-                c[1].caption(md(s["reason"]))
-            c[2].markdown(f"**{'$' + format(s['cost_pp'], '.0f') if s.get('cost_pp') else 'Free'}**")
-            c[2].caption("per person / night" if s["kind"] == "lodging" else "per person")
-            a = st.columns(5)
-            if a[0].button("Swap", key=f"sw{n}", icon=I["swap"], help="Find a different place for this stop", use_container_width=True):
-                act(f"replace stop {n}", f"Swapped stop {n}")
-            if a[1].button("Cheaper", key=f"ch{n}", icon=I["cheaper"], use_container_width=True, disabled=not s.get("cost_pp")):
-                act(f"make stop {n} cheaper", f"Found a cheaper option for stop {n}")
-            directions = (s.get("booking") or {}).get("links", {}).get("Directions")
-            if safe_url(directions):
-                a[2].link_button("Directions", safe_url(directions), icon=I["directions"], use_container_width=True)
-            if s["kind"] != "attraction" or s.get("cost_pp"):
-                tickets = s["kind"] == "attraction"
-                if a[3].button("Tickets" if tickets else "Reserve", key=f"bk{n}", icon=I["book"], use_container_width=True,
-                               help={"lodging": "Reserve a room", "attraction": "Get tickets or book a tour"}.get(s["kind"], "Reserve a table")):
-                    act(f"book stop {n}", "Request ready - check the details under this stop")
-            elif a[3].button("Save", key=f"bk{n}", icon=I["save"], use_container_width=True):
-                act(f"save stop {n}", "Saved to favorites")
-            if a[4].button("Remove", key=f"rm{n}", icon=I["remove"], use_container_width=True, disabled=len(stops) <= 1):
-                act(f"remove stop {n}", f"Removed stop {n}")
-            if (st_.get("pending") or {}).get("slot_id") == s["id"]:
-                reservation_panel(st_["pending"])  # right under this place
-            if st.button("Closed for good? Replace it", key=f"cl{n}", type="tertiary", icon=I["warn"],
-                         help="If this place has shut down, I'll replace it and never recommend it again"):
-                act(f"stop {n} is permanently closed", f"Replaced stop {n} - it won't be recommended again")
-            with st.expander(f"Reviews · {(p.get('rating') or 0):.1f}★ from {int(p.get('n_reviews') or 0):,}"):
-                render_reviews(p)
-            with st.expander("Details and other options"):
-                lv = p.get("live") or {}
-                if lv.get("checked"):
-                    st.caption(md(f"Checked live (Google, {lv['checked']}): {'open' if lv.get('status') == 'OPERATIONAL' else lv.get('status')}"
-                                  + (f" · hours that day {s.get('hours_that_day')}" if s.get("hours_that_day") else "")
-                                  + (f" · parking: {', '.join(lv['parking'])}" if lv.get("parking") else "")
-                                  + (f" · {lv['phone']}" if lv.get("phone") else "")))
-                elif s.get("hours_that_day"):
-                    st.caption(md(f"Hours that day (2021 data): {s['hours_that_day']}"))
-                if p.get("ev_love"):
-                    st.markdown(md(f"**Travelers love:** {p['ev_love']}  \n**Watch out for:** {p.get('ev_complaints') or '-'}  \n"
-                                   f"**Tip:** {p.get('ev_tip') or '-'}  \n*TripAdvisor summary*"))
-                if p.get("menu_highlights"):
-                    st.caption(md(f"Menu highlights: {p['menu_highlights'][:200]}"))
-                bk = s.get("booking") or {}
-                if bk.get("advice"):
-                    st.caption(md(bk["advice"]) + " Nothing is booked without your OK.")
-                links = [f"[{k}]({safe_url(v)})" for k, v in (bk.get("links") or {}).items() if safe_url(v) and k != "Directions"]
-                if links:
-                    st.markdown(" · ".join(links))
-                alts = s.get("alternatives") or []
-                if alts:
-                    st.markdown("**Other options the agents liked**")
-                    for k, alt in enumerate(alts[:3], 1):
-                        cc = st.columns([5, 1.3])
-                        cc[0].markdown(md(f"{alt['name']} · {I['star']} {(alt.get('rating') or 0):.1f} · ~${alt.get('cost_pp') or 0:.0f} per person"))
-                        if cc[1].button("Use this", key=f"alt{n}-{k}", use_container_width=True):
-                            act(f"use option {k} for stop {n}", f"Stop {n} is now {alt['name']}")
-                f1, f2, _ = st.columns([1, 1, 2])
-                if f1.button("More like this", key=f"up{n}", icon=I["up"], use_container_width=True):
-                    ss.planner.feedback(p, +1)
-                    st.toast("Noted - I'll favor places like this.", icon=I["check"])
-                if f2.button("Not for us", key=f"dn{n}", icon=I["down"], use_container_width=True):
-                    act(f"we don't like stop {n}", "Replaced and noted for next time")
+        stop_card(n, s, st_, res_by, len(stops))
 
-    if st.button("Add a stop", icon=I["add"]):
+    if st.button("Add a stop", icon=I["add"], type="tertiary"):
         ss.chat.append({"role": "assistant", "content": "What would you like to add? For example *add a coffee stop after stop 1* or *add dessert after dinner*."})
-        ss["_goto"] = "chat"
-
+        st.rerun()
     pnd = st_.get("pending")
-    if pnd and pnd.get("slot_id") not in shown_ids:  # asked for in chat for a stop not shown here: keep it visible
+    if pnd and pnd.get("slot_id") not in shown_ids:  # asked for in chat for a stop on another day: keep it visible
         reservation_panel(pnd)
 
-    st.divider()
-    t_budget, t_book, t_how = st.tabs(["Budget", "Bookings & events", "How it was planned"])
+    trip_details(st_, req, b, stops, day_txt)
+
+
+def trip_details(st_: dict, req: dict, b: dict, stops: list, day_txt: str):
+    """Budget, bookings, events and how the agents planned it, then calendar / save / route buttons."""
+    t_budget, t_book, t_events, t_how = st.tabs(["Budget", "Bookings", "Events", "How it was planned"])
     with t_budget:
         if b:
             st.markdown(f"**${b['total_pp']:.0f} per person** · group of {b.get('party_size', 2)}: **${b['group_total']:.0f}** · "
@@ -903,7 +1075,7 @@ def page_itinerary():
                        "*book dinner* / *reserve the hotel* / *get tickets for stop 3* in chat.")
         for k, r in enumerate(res):
             hotel = r["kind"] == "lodging"
-            with st.container(border=True):
+            with card():
                 top = st.columns([4, 1.4])
                 when = (f"check in {r.get('date', '')} · {r.get('nights', 1)} night(s) · {r.get('rooms', 1)} room(s)" if hotel
                         else f"{r.get('date', '')} at {fmt_time(r['time_min'])}")
@@ -935,19 +1107,19 @@ def page_itinerary():
         for i in st_.get("issues") or []:
             if i["type"] == "booking_conflict":
                 st.error(md(i["msg"]), icon=I["warn"])
+    with t_events:
         evs = st_.get("events") or []
-        if evs:
-            st.markdown("**Happening around then**")
-            for e in evs[:8]:
-                st.markdown(md(f"- **{e['name']}** - {e['note']}" + (f" ([tickets]({safe_url(e.get('url'))}))" if safe_url(e.get("url")) else "")))
+        if not evs:
+            st.caption("No events found for your dates. Ask *what events are on that day?* in chat to check again.")
+        for e in evs[:8]:
+            st.markdown(md(f"- **{e['name']}** - {e['note']}" + (f" ([tickets]({safe_url(e.get('url'))}))" if safe_url(e.get("url")) else "")))
     with t_how:
         st.caption("What each AI agent did for the latest change.")
         st.dataframe(pd.DataFrame(st_.get("trace") or []).rename(columns={"agent": "Agent", "via": "How", "did": "What it did"}),
                      hide_index=True, use_container_width=True)
 
-    st.divider()
     bk = st_.get("booking") or {}
-    c = st.columns(4)
+    c = st.columns(3)
     if bk.get("ics"):
         c[0].download_button("Add to my calendar", bk["ics"], file_name="arizona_itinerary.ics", mime="text/calendar",
                              icon=I["calendar"], use_container_width=True)
@@ -962,11 +1134,25 @@ def page_itinerary():
             + (f"<a href='{esc(safe_url(bk.get('route_url')))}' rel='noopener noreferrer'>Open the route in Google Maps</a>" if safe_url(bk.get("route_url")) else "")
             + "</p><p><small>Planned with Saguaro (MIS 556). Verify hours and prices before you go.</small></p></body></html>")
     c[1].download_button("Save as a page", page, file_name="arizona_itinerary.html", mime="text/html", icon=I["download"], use_container_width=True)
-    if c[2].button("See it on the map", icon=I["map"], use_container_width=True):
-        ss["_goto"] = "map"
     if safe_url(bk.get("route_url")):
-        c[3].link_button("Route in Google Maps", safe_url(bk["route_url"]), icon=I["route"], use_container_width=True)
+        c[2].link_button("Route in Google Maps", safe_url(bk["route_url"]), icon=I["route"], use_container_width=True)
     st.caption("Hours and prices come from Google Maps (2021) and TripAdvisor unless marked as checked live. Please verify before you go.")
+
+
+def page_plan():
+    if ss.get("_plan_next"):  # a plan requested from the start form: build it, then show it
+        with st.spinner("Your agents are planning your trip..."):
+            ask(ss.pop("_plan_next"))
+        st.rerun()
+    st_ = plan_state()
+    if not st_:
+        start_view()
+        return
+    left, right = st.columns([1, 1.9], gap="large")
+    with left:
+        chat_panel(st_)
+    with right:
+        trip_panel(st_)
 
 
 def page_map():
@@ -1019,7 +1205,7 @@ def page_map():
     with right:
         for n, s in shown:
             p = s["place"]
-            with st.container(border=True):
+            with card():
                 upd = " :blue-badge[Updated]" if s["id"] in ss.changed_ids else ""
                 st.markdown(md(f"**{n}. {p['name']}**{upd}"))
                 st.caption(md(f"{(s.get('time') or '').split(' - ')[0]} · {KIND.get(s['kind'], ('Stop',))[0]} · {p.get('city', '')}"))
@@ -1054,7 +1240,7 @@ def page_group():
         ss.planner.display_name = clean_name(who)
     st_ = plan_state()
     if ss.planner.shared_code:
-        with st.container(border=True):
+        with card():
             st.markdown(f"Your share code: **`{ss.planner.shared_code}`**")
             st.caption("Send this code to your group. Sharing includes the itinerary and the chat - never your key, PIN or saved preferences.")
             c1, c2, _ = st.columns([1, 1, 2])
@@ -1076,7 +1262,7 @@ def page_group():
                     st.caption(md(f"{clean_name(e['who'])} · {ago(e['t'])}: {e['what'][:60]}"))
     else:
         c1, c2 = st.columns(2)
-        with c1, st.container(border=True):
+        with c1, card():
             st.markdown("**Share my plan**")
             st.caption("Creates a code your friends can join.")
             if st.button("Create a share code", icon=I["share"], type="primary", use_container_width=True, disabled=not st_):
@@ -1084,7 +1270,7 @@ def page_group():
                 st.rerun()
             if not st_:
                 st.caption("Make a plan first.")
-        with c2, st.container(border=True):
+        with c2, card():
             st.markdown("**Join a friend's plan**")
             code = st.text_input("Share code", placeholder="SAG-XXXXXXXX", max_chars=12, label_visibility="collapsed")
             if st.button("Join", use_container_width=True, disabled=not code):
@@ -1140,7 +1326,7 @@ def safe(fn):
         except Exception:  # Streamlit's own rerun/stop signals are BaseException and pass through
             import traceback
             logging.getLogger("app").error("page %s failed: %s", fn.__name__, redact(traceback.format_exc()))
-            st.error("Sorry - this page hit a problem. Your plan is safe; try again or use the Chat tab.", icon=I["warn"])
+            st.error("Sorry - this page hit a problem. Your plan is safe; try again or open the Plan page.", icon=I["warn"])
     run_page.__name__ = fn.__name__
     return run_page
 
@@ -1154,11 +1340,11 @@ def page_trips():
                   "They last while this browser tab is open. Turn on **Remember me** in Preferences & privacy to keep them "
                   "for next time."))
     if not trips:
-        empty_state("No trips yet. Plan one in Chat or Quick plan and it shows up here.")
+        empty_state("No trips yet. Plan one on the Plan page and it shows up here.")
         return
     for t in trips:
         current = t["id"] == ss.planner.trip_id
-        with st.container(border=True):
+        with card():
             c = st.columns([4, 1.2, 1.2], vertical_alignment="center")
             c[0].markdown(md(f"**{t.get('city') or 'Trip'}** · {t.get('when') or ''}"
                              + ("  :blue-badge[Current trip]" if current else "")))
@@ -1186,15 +1372,12 @@ def page_trips():
 
 
 # ================================================================== navigation (titles stay fixed)
-chat_page = st.Page(safe(page_chat), title="Chat", icon=I["chat"], default=True)
-quick_page = st.Page(safe(page_quick), title="Quick plan", icon=I["form"], url_path="quick-plan")
-itinerary_page = st.Page(safe(page_itinerary), title="Itinerary", icon=I["itinerary"], url_path="itinerary")
+plan_page = st.Page(safe(page_plan), title="Plan", icon=":material/explore:", default=True)
 map_page = st.Page(safe(page_map), title="Map", icon=I["map"], url_path="map")
-group_page = st.Page(safe(page_group), title="Group", icon=I["group"], url_path="group")
 trips_page = st.Page(safe(page_trips), title="My trips", icon=I["trips"], url_path="trips")
-nav = st.navigation([chat_page, quick_page, itinerary_page, map_page, trips_page, group_page], position="top")
-if nav.url_path == "itinerary":
-    ss.unseen = 0  # you're looking at it
+group_page = st.Page(safe(page_group), title="Group", icon=I["group"], url_path="group")
+st.logo(str(Path(__file__).parent / "assets" / "wordmark.png"), size="large")
+nav = st.navigation([plan_page, map_page, trips_page, group_page], position="top")
 
 top_bar()
 auto_sync()
