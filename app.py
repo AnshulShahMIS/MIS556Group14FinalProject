@@ -97,7 +97,11 @@ def _early_js() -> str:
             "'[class*=\"_viewerBadge_\"],[class*=\"_profileContainer_\"],[class*=\"_profilePreview_\"],"
             # embed mode's "Built with Streamlit / Fullscreen" strip (the Fullscreen link leads back to the badge)
             "[class*=\"_container_\"]:has(> [class*=\"_hostedName_\"]),[class*=\"_hostedName_\"],[class*=\"_linkOutText_\"]"
-            "{display:none!important}';t.head.appendChild(s);"
+            "{display:none!important}"
+            # the embed frame's grey rounded border and the empty space left where that strip was: the app fills
+            # the window (the page behind it takes the app's background colour, see THEME_SRC)
+            "[class*=\"_streamlitAppContainer_\"]{border:0!important;border-radius:0!important;padding:0!important}"
+            "';t.head.appendChild(s);"
             # keep only the saguaro icon on the tab: ours (built in) or the app's own (served from /media/);
             # Streamlit's default icons are removed whenever they're added or switched in
             "var ic='" + icon + "';var keep=function(){var ours=null;"
@@ -139,12 +143,17 @@ def _theme_src() -> str:
         "var it=null;for(var i=0;i<20&&!it;i++){if(i%5===0)b.click();await s(120);"
         "it=D.querySelector('[data-testid=\"stMainMenuItem-theme-'+n+'\"]');}"
         "if(it){it.click();await s(150);}if(D.querySelector('[data-testid^=\"stMainMenuItem\"]'))b.click();};}"
-        "if(window.__azTheme!==2){window.__azTheme=2;var K='stActiveTheme-'+location.pathname+'-v2';"
+        "if(window.__azTheme!==3){window.__azTheme=3;var K='stActiveTheme-'+location.pathname+'-v2';"
         "var v=localStorage.getItem(K);var first=!v||v==='\"System\"';if(first)localStorage.setItem(K,JSON.stringify('Light'));"
         "var embedded=window!==window.parent,started=false;"
         "setInterval(function(){var a=document.querySelector('.stApp');if(!a)return;"
         "var m=getComputedStyle(a).backgroundColor.match(/[0-9]+/g);if(!m)return;var dark=(+m[0])+(+m[1])+(+m[2])<300;"
         "document.documentElement.classList.toggle('az-dark',dark);"
+        # Streamlit Cloud's page around the embedded app: same background, so no white edges in either theme
+        "var o=null;try{var w=window;while(w.parent!==w){w=w.parent;o=w.document;}}catch(e){}"
+        "if(o&&o!==document&&o.head){var st=o.getElementById('az-outer-bg');if(!st){st=o.createElement('style');"
+        "st.id='az-outer-bg';o.head.appendChild(st);}var css='html,body{background:'+getComputedStyle(a).backgroundColor+'!important}';"
+        "if(st.textContent!==css)st.textContent=css;}"
         "if(started)return;var b=" + menu + ";"
         "if(b){started=true;if(first&&dark)window.__azPick('Light');}"  # menu: Streamlit remembers the choice itself
         "else if(embedded&&document.querySelector('[data-testid=\"stMain\"]')){started=true;"
