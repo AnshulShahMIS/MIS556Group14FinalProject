@@ -131,7 +131,7 @@ def _theme_src() -> str:
               "Dark": {"base": 1, **{k: cfg["dark"][k] for k in keys}, **common}}
     menu = "document.querySelector('[data-testid=\"stMainMenu\"] button, button[aria-label=\"Main menu\"]')"
     return (
-        "if(!window.__azPick){var TH=" + json.dumps(themes) + ";"
+        "if(window.__azPickV!==2){window.__azPickV=2;var TH=" + json.dumps(themes) + ";"
         "window.__azPick=async function(n){var D=document,s=function(m){return new Promise(function(r){setTimeout(r,m)})};"
         "var b=" + menu + ";"
         "if(!b){try{localStorage.setItem('azTheme',n);}catch(e){}"
@@ -139,7 +139,7 @@ def _theme_src() -> str:
         "var it=null;for(var i=0;i<20&&!it;i++){if(i%5===0)b.click();await s(120);"
         "it=D.querySelector('[data-testid=\"stMainMenuItem-theme-'+n+'\"]');}"
         "if(it){it.click();await s(150);}if(D.querySelector('[data-testid^=\"stMainMenuItem\"]'))b.click();};}"
-        "if(!window.__azTheme){window.__azTheme=1;var K='stActiveTheme-'+location.pathname+'-v2';"
+        "if(window.__azTheme!==2){window.__azTheme=2;var K='stActiveTheme-'+location.pathname+'-v2';"
         "var v=localStorage.getItem(K);var first=!v||v==='\"System\"';if(first)localStorage.setItem(K,JSON.stringify('Light'));"
         "var embedded=window!==window.parent,started=false;"
         "setInterval(function(){var a=document.querySelector('.stApp');if(!a)return;"
@@ -173,7 +173,7 @@ EMBED_REDIRECT_JS = ("try{var L=window.top.location;if(/\\.streamlit\\.app$/.tes
 
 
 @st.cache_resource(show_spinner=False)
-def _hide_badges_from_first_paint() -> str:
+def _hide_badges_from_first_paint(head_script: str) -> str:
     """Streamlit Cloud draws its badge at the same moment it loads the app's frame. The script above only runs once
     the app's Python code starts (about 2 s later), so the badge flashes. Here the same script goes into the frame's
     own HTML page, which loads in a fraction of a second: a copy of Streamlit's index.html with the script added is
@@ -190,7 +190,7 @@ def _hide_badges_from_first_paint() -> str:
         html = (Path(st.__file__).parent / "static" / "index.html").read_text(encoding="utf-8")
         folder = Path(tempfile.gettempdir()) / "saguaro_static"
         folder.mkdir(exist_ok=True)
-        (folder / "index.html").write_text(html.replace("<head>", f"<head><script>{EMBED_REDIRECT_JS}{EARLY_JS}try{{{THEME_SRC}}}catch(e){{}}</script>", 1),
+        (folder / "index.html").write_text(html.replace("<head>", f"<head><script>{head_script}</script>", 1),
                                            encoding="utf-8")
         patched = 0
         for obj in gc.get_objects():
@@ -204,7 +204,7 @@ def _hide_badges_from_first_paint() -> str:
         return f"not applied: {type(e).__name__}"
 
 
-_hide_badges_from_first_paint()
+_hide_badges_from_first_paint(f"{EMBED_REDIRECT_JS}{EARLY_JS}try{{{THEME_SRC}}}catch(e){{}}")
 
 import pandas as pd  # noqa: E402
 import pydeck as pdk  # noqa: E402
