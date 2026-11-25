@@ -198,6 +198,11 @@ if "planner" not in ss:
 
 
 # ================================================================== helpers
+def city_stays(legs):
+    from azmulti.units import city_stays as _cs
+    return _cs(legs)
+
+
 def dist(km) -> str:
     """Distance in miles first (US audience) with km alongside, e.g. '24.9 mi (40.1 km)'."""
     km = float(km or 0)
@@ -753,13 +758,25 @@ def page_itinerary():
     res_by = {r["place_id"]: r for r in st_.get("reservations") or []}
     cur_day = None
     shown_ids = {x['id'] for x in stops}
+    stays = city_stays(req.get("legs"))  # multi-city: where each city's section starts
     for n, s in enumerate(stops, 1):
         p = s["place"]
         if req.get("days", 1) > 1 and s["day"] != cur_day:
             cur_day = s["day"]
+            stay = stays.get(cur_day)
+            if stay:  # multi-city: a section per city, with its days under it
+                city, ndays = stay
+                if cur_day > 1:
+                    st.divider()
+                span = ""
+                if first:
+                    d0, d1 = first + timedelta(days=cur_day - 1), first + timedelta(days=cur_day + ndays - 2)
+                    span = f"{d0:%a, %b} {d0.day}" + (f" – {d1:%a, %b} {d1.day}" if ndays > 1 else "")
+                st.header(f"{city} · {ndays} day{'s' if ndays > 1 else ''}", anchor=False)
+                if span:
+                    st.caption(span)
             st.subheader(f"Day {cur_day}" + (f" · {first + timedelta(days=cur_day - 1):%A, %B} "
-                                              f"{(first + timedelta(days=cur_day - 1)).day}" if first else "")
-                         + (f" · {s['city']}" if req.get("legs") and s.get("city") else ""))
+                                              f"{(first + timedelta(days=cur_day - 1)).day}" if first else ""), anchor=False)
             wx = by_day.get(cur_day) or by_day.get(str(cur_day))
             if wx:  # that day's weather in that day's city
                 st.caption(md(f"{wx['city']}: high **{wx['high_f']}°F**"

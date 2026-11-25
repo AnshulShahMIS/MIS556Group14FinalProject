@@ -330,3 +330,10 @@ def test_answers_sound_natural():
     assert "Sedona" in out["answer"] and "your stops" not in out["answer"]
     from azmulti.units import snip
     assert snip("one two three four", 10) == "one two…"
+
+
+def test_multi_city_plan_is_grouped_by_city():
+    out = Planner().ask("Trip for 2 from 2027-03-03: 3 days in Phoenix, then 2 days in Sedona, hiking and Mexican food")
+    a = out["answer"]
+    assert "#### Phoenix · 3 days" in a and "#### Sedona · 2 days" in a
+    assert a.index("#### Phoenix") < a.index("**Day 1") < a.index("#### Sedona") < a.index("**Day 4")

@@ -21,7 +21,7 @@ from ..hours import DAYS, fmt_time
 from ..llm import text
 from ..security import safe_url
 from ..state import PlannerState
-from ..units import dist, snip
+from ..units import city_stays, dist, snip
 from .logistics import rooms_needed
 
 
@@ -248,8 +248,15 @@ def template_answer(state: PlannerState) -> str:
     for s in pay["stops"]:
         if r.get("days", 1) > 1 and s["day"] != cur_day:
             cur_day = s["day"]
-            lines.append(f"**Day {cur_day}" + (f" · {base + timedelta(days=cur_day - 1):%A, %b %d}" if base else "")
-                         + (f" · {s['day_city']}" if r.get("legs") and s.get("day_city") else "") + "**")
+            stay = city_stays(r.get("legs")).get(cur_day)
+            if stay:  # multi-city: a section per city (city · N days · dates), its days under it
+                city, ndays = stay
+                span = ""
+                if base:
+                    d0, d1 = base + timedelta(days=cur_day - 1), base + timedelta(days=cur_day + ndays - 2)
+                    span = f" ({d0:%a %b %d}" + (f" – {d1:%a %b %d}" if ndays > 1 else "") + ")"
+                lines.append(f"#### {city} · {ndays} day{'s' if ndays > 1 else ''}{span}")
+            lines.append(f"**Day {cur_day}" + (f" · {base + timedelta(days=cur_day - 1):%A, %b %d}" if base else "") + "**")
             wx = day_weather(cond, cur_day)
             if wx and r.get("legs"):  # multi-city: that day's weather where you'll be
                 lines.append(f"*{wx['city']}: high {wx['high_f']}°F"
