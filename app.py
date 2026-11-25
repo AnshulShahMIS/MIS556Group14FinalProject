@@ -46,6 +46,12 @@ st.html("""<style>
 [class*="st-key-card"] { box-shadow: 0 1px 2px rgba(42, 36, 32, 0.04); }
 [data-testid="stHeader"] { background: #FFFFFF; border-bottom: 1px solid #EADFD3; }
 h1 { letter-spacing: -0.01em; }
+/* planning screen: the chat column stays in view while the trip on the right scrolls, and its conversation fills
+   the screen height (wide screens only; on phones the chat sits above the trip) */
+@media (min-width: 900px) {
+  [data-testid="stColumn"]:has(.st-key-chatpanel) { position: sticky; top: 4.5rem; align-self: flex-start; }
+  .st-key-chatmsgs { height: calc(100vh - 19rem) !important; min-height: 18rem; }
+}
 /* the agents' replies sit in a narrow chat column: smaller headings there */
 [data-testid="stChatMessage"] h1, [data-testid="stChatMessage"] h2, [data-testid="stChatMessage"] h3 { font-size: 1.2rem; }
 [data-testid="stChatMessage"] h4, [data-testid="stChatMessage"] h5 { font-size: 1.02rem; }
@@ -631,7 +637,7 @@ def top_bar():
 # ================================================================== chat (left side of the Plan page)
 def chat_messages(height: int | None = None):
     """The conversation, newest at the bottom."""
-    box = st.container(height=height, border=False) if height else st.container()
+    box = st.container(height=height, border=False, key="chatmsgs") if height else st.container()
     with box:
         for m in ss.chat:
             with st.chat_message(m["role"], avatar=I["user"] if m["role"] == "user" else I["bot"]):
@@ -1180,7 +1186,7 @@ def page_plan():
         start_view()
         return
     left, right = st.columns([1, 1.9], gap="large")
-    with left:
+    with left, st.container(key="chatpanel"):
         chat_panel(st_)
     with right:
         trip_panel(st_)
