@@ -52,7 +52,7 @@ h1 { letter-spacing: -0.01em; }
   [data-testid="stColumn"]:has(.st-key-chatpanel) { position: sticky; top: 4.5rem; align-self: flex-start; }
   /* (Streamlit gives a fixed-height box a fixed flex size on its wrapper: both are overridden) */
   [data-testid="stLayoutWrapper"]:has(> .st-key-chatmsgs), .st-key-chatmsgs {
-    height: calc(100vh - 28rem) !important; min-height: 18rem; flex: 0 0 auto !important; }
+    height: calc(100vh - 22rem) !important; min-height: 18rem; flex: 0 0 auto !important; }
 }
 /* the agents' replies sit in a narrow chat column: smaller headings there */
 [data-testid="stChatMessage"] h1, [data-testid="stChatMessage"] h2, [data-testid="stChatMessage"] h3 { font-size: 1.2rem; }
@@ -254,8 +254,8 @@ EXAMPLES = [
     ("Date night", "Romantic date night in Sedona on Friday, scenic sunset then Italian dinner, $150 per person"),
     ("Game day", "Spring training game day in Mesa in March for 5 friends aged 30, $90 each, then bars"),
 ]
-FOLLOW_UPS = ["Make it cheaper", "Show budget, balanced and premium options", "Swap dinner for something different",
-              "Add a coffee stop after stop 1", "What's the weather?", "What events are on that day?", "Book dinner",
+FOLLOW_UPS = ["Make it cheaper", "Swap dinner", "Book dinner", "What's the weather?",  # first four shown as buttons
+              "Show budget, balanced and premium options", "Add a coffee stop after stop 1", "What events are on that day?",
               "Make it kid friendly", "Top 5 attractions near here"]
 QUICK = {"Top 5 attractions for me": "Top 5 attractions in Sedona for hiking and photography"}  # example; users type their own
 KIND = {"attraction": ("Activity", [37, 99, 235]), "restaurant": ("Food", [217, 119, 6]), "nightlife": ("Night out", [124, 58, 237]),
@@ -717,8 +717,12 @@ def chat_panel(st_):
     chat_messages(height=430)
     pending_buttons(st_)
     q = question_card()
-    if not q:
-        pick = st.pills("Suggestions", FOLLOW_UPS, key=f"sugg-{len(ss.chat)}", label_visibility="collapsed")
+    if not q:  # the most used follow-ups as buttons, the rest one click away (keeps the chat column tidy)
+        c1, c2 = st.columns([4, 1.25], vertical_alignment="center")
+        pick = c1.pills("Suggestions", FOLLOW_UPS[:4], key=f"sugg-{len(ss.chat)}", label_visibility="collapsed")
+        with c2.popover("More ideas", use_container_width=True):
+            more = st.pills("More ideas", FOLLOW_UPS[4:], key=f"more-{len(ss.chat)}", label_visibility="collapsed")
+        pick = pick or more
         if pick:
             with st.spinner("Working on it..."):
                 ask(pick)
