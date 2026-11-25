@@ -50,7 +50,9 @@ h1 { letter-spacing: -0.01em; }
    the screen height (wide screens only; on phones the chat sits above the trip) */
 @media (min-width: 900px) {
   [data-testid="stColumn"]:has(.st-key-chatpanel) { position: sticky; top: 4.5rem; align-self: flex-start; }
-  .st-key-chatmsgs { height: calc(100vh - 19rem) !important; min-height: 18rem; }
+  /* (Streamlit gives a fixed-height box a fixed flex size on its wrapper: both are overridden) */
+  [data-testid="stLayoutWrapper"]:has(> .st-key-chatmsgs), .st-key-chatmsgs {
+    height: calc(100vh - 28rem) !important; min-height: 18rem; flex: 0 0 auto !important; }
 }
 /* the agents' replies sit in a narrow chat column: smaller headings there */
 [data-testid="stChatMessage"] h1, [data-testid="stChatMessage"] h2, [data-testid="stChatMessage"] h3 { font-size: 1.2rem; }
