@@ -720,7 +720,7 @@ def chat_panel(st_):
     if not q:  # the most used follow-ups as buttons, the rest one click away (keeps the chat column tidy)
         with st.container(horizontal=True, gap="small", vertical_alignment="center"):  # wraps onto a second line
             pick = st.pills("Suggestions", FOLLOW_UPS[:4], key=f"sugg-{len(ss.chat)}", label_visibility="collapsed",
-                            width="content")
+                            width="stretch")
             with st.popover("More ideas"):
                 more = st.pills("More ideas", FOLLOW_UPS[4:], key=f"more-{len(ss.chat)}", label_visibility="collapsed")
         pick = pick or more
