@@ -41,8 +41,12 @@ st.html("""<style>
   animation: az-pulse 1.4s ease-in-out infinite; }
 @keyframes az-pulse { 0%%, 100%% { opacity: 1; } 50%% { opacity: 0.45; } }
 /* trip-planner look: white cards on the sand background, a white header bar */
-[class*="st-key-card"], [data-testid="stForm"], [data-testid="stExpander"] details, [data-testid="stChatMessage"],
+[class*="st-key-card"], [data-testid="stForm"], [data-testid="stExpander"] details,
 [data-testid="stPopoverBody"] { background: #FFFFFF; }
+/* chat: the agents' replies sit on the page background; the visitor's own messages are lightly tinted */
+[data-testid="stChatMessage"] { background: transparent; }
+[class*="st-key-umsg"] [data-testid="stChatMessage"] { background: #F3EBE1; }
+.az-dark [class*="st-key-umsg"] [data-testid="stChatMessage"] { background: #26201C; }
 [class*="st-key-card"] { box-shadow: 0 1px 2px rgba(42, 36, 32, 0.04); }
 [data-testid="stHeader"] { background: #FFFFFF; border-bottom: 1px solid #EADFD3; }
 h1 { letter-spacing: -0.01em; }
@@ -74,7 +78,7 @@ h1 { letter-spacing: -0.01em; }
 .az-dark .st-key-theme_btn [data-testid="stIconMaterial"]::after { content: "light_mode"; font-size: 1.25rem; }
 /* dark mode: the same layout on warm charcoal */
 .az-dark [class*="st-key-card"], .az-dark [data-testid="stForm"], .az-dark [data-testid="stExpander"] details,
-.az-dark [data-testid="stChatMessage"], .az-dark [data-testid="stPopoverBody"] { background: #221D1A; }
+.az-dark [data-testid="stPopoverBody"] { background: #221D1A; }
 .az-dark [data-testid="stHeader"] { background: #1C1816; border-bottom-color: #3A322D; }
 .az-dark [data-testid="stStatusWidget"]::before { color: rgba(243, 236, 228, 0.7); }
 .az-dark img[data-testid="stHeaderLogo"] { content: url("%s"); }
@@ -644,8 +648,11 @@ def chat_messages(height: int | None = None):
     """The conversation, newest at the bottom."""
     box = st.container(height=height, border=False, key="chatmsgs") if height else st.container()
     with box:
-        for m in ss.chat:
-            with st.chat_message(m["role"], avatar=I["user"] if m["role"] == "user" else I["bot"]):
+        for i, m in enumerate(ss.chat):
+            # each message in a keyed box: the visitor's own messages get a light tint (style above)
+            user = m["role"] == "user"
+            with st.container(key=f"{'umsg' if user else 'amsg'}{i}"), \
+                    st.chat_message(m["role"], avatar=I["user"] if user else I["bot"]):
                 st.markdown(md(m["content"]))
                 if m.get("trace"):
                     with st.expander("How the agents worked on this"):
