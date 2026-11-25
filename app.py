@@ -718,10 +718,11 @@ def chat_panel(st_):
     pending_buttons(st_)
     q = question_card()
     if not q:  # the most used follow-ups as buttons, the rest one click away (keeps the chat column tidy)
-        c1, c2 = st.columns([4, 1.25], vertical_alignment="center")
-        pick = c1.pills("Suggestions", FOLLOW_UPS[:4], key=f"sugg-{len(ss.chat)}", label_visibility="collapsed")
-        with c2.popover("More ideas", use_container_width=True):
-            more = st.pills("More ideas", FOLLOW_UPS[4:], key=f"more-{len(ss.chat)}", label_visibility="collapsed")
+        with st.container(horizontal=True, gap="small", vertical_alignment="center"):  # wraps onto a second line
+            pick = st.pills("Suggestions", FOLLOW_UPS[:4], key=f"sugg-{len(ss.chat)}", label_visibility="collapsed",
+                            width="content")
+            with st.popover("More ideas"):
+                more = st.pills("More ideas", FOLLOW_UPS[4:], key=f"more-{len(ss.chat)}", label_visibility="collapsed")
         pick = pick or more
         if pick:
             with st.spinner("Working on it..."):
