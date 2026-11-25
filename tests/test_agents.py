@@ -118,11 +118,17 @@ def test_full_conversation_flow():
     assert thanks["intent"] == "chat" and len(thanks["slots"]) == len(plan["slots"])   # plan kept
     assert p.ask("replace stop 2")["intent"] == "revise"
     q = p.ask("what time is dinner?")
-    assert q["intent"] == "question" and "In your plan, **Dinner**" in q["answer"]
+    assert q["intent"] == "question" and "(dinner, " in q["answer"] and "the data says" not in q["answer"]
     new = p.ask("now plan a different day in Sedona with hiking")
     assert new["intent"] == "new_plan" and new["request"]["city"] == "Sedona"
 
 
-def test_missing_city_is_disclosed():
-    out = Planner().ask("something fun to do this weekend")
-    assert out["intent"] == "new_plan" and "No city given" in out["answer"]
+def test_missing_city_asks_where_instead_of_guessing():
+    p = Planner()
+    out = p.ask("something fun to do this weekend")
+    assert out["intent"] == "chat" and out["interview"]["q"]["key"] == "where" and "Phoenix" in out["interview"]["q"]["options"]
+    out = p.ask("Tempe")
+    while out.get("interview") and out["interview"]["q"]["key"] != "confirm":
+        out = p.ask("skip")
+    out = p.ask("Plan it")
+    assert out["intent"] == "new_plan" and out["request"]["city"] == "Tempe" and out["request"]["weekday"] == 5

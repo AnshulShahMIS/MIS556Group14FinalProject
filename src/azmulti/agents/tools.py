@@ -33,7 +33,7 @@ from ..state import PlannerState, TripRequest
 from .concierge import concierge_node
 from .pipeline_runner import run_pipeline
 from .weather_agent import weather_node
-from ..units import dist
+from ..units import dist, snip
 
 ORD = {"first": 0, "1st": 0, "second": 1, "2nd": 1, "third": 2, "3rd": 2, "fourth": 3, "4th": 3, "fifth": 4, "5th": 4,
        "sixth": 5, "last": -1}
@@ -574,7 +574,7 @@ def h_top(state, cmd):
         lines.append(f"   Match to your interests: **{h['similarity']:.0%}** (place) · **{h.get('review_match', 0):.0%}** (reviews)  ")
         ev = h.get("review_evidence")
         if ev:
-            lines.append(f"   A reviewer said ({ev['stars']}★, {ev.get('year') or ''}): \"{ev['text'][:180]}{'...' if len(ev['text']) > 180 else ''}\"")
+            lines.append(f"   A reviewer said ({ev['stars']}★, {ev.get('year') or ''}): \"{snip(ev['text'], 180)}\"")
     lines += ["", "Ranked by meaning, not keywords: your request and every place are embedded with MiniLM, then the agent "
               "adds how well real reviews match, rating trust and distance. Try another city or interest, "
               "*reviews of " + hits[0]["name"] + "*, or *plan a Saturday" + (" in " + res["city"] if res["city"] else "") + "* to build a full day."]
@@ -1232,7 +1232,7 @@ def review_block(p: dict, n_quotes: int = 3) -> str:
         src = "From real Google reviews (2018-2021 dataset)"
     if quotes:
         lines.append(f"*{src}:*")
-        lines += [f"> {'★' * int(q['stars'] or 0)}{' · ' + str(q['when']) if q.get('when') else ''} - {q['text'][:280]}" for q in quotes]
+        lines += [f"> {'★' * int(q['stars'] or 0)}{' · ' + str(q['when']) if q.get('when') else ''} - {snip(q['text'], 280)}" for q in quotes]
     if safe := __import__("azmulti.security", fromlist=["safe_url"]).safe_url(p.get("url")):
         lines.append(f"[Read all reviews on Google Maps]({safe})")
     return "\n\n".join(lines)

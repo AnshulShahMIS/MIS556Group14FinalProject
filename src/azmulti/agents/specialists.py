@@ -14,7 +14,7 @@ from .. import prompts
 from ..catalog import get_catalog
 from ..llm import structured
 from ..state import Choice, PlannerState
-from ..units import dist
+from ..units import dist, snip
 
 TIER_CAP = {"budget": {"restaurant": 20, "attraction": 25, "nightlife": 25, "lodging": 120},
             "balanced": {"restaurant": 60, "attraction": 90, "nightlife": 40, "lodging": 260},
@@ -84,7 +84,7 @@ def _reason_rules(slot: dict, p: dict, req: dict, chained: bool) -> str:
     out = f"{p['primary_category']}, " + "; ".join(bits) + "."
     ev = p.get("review_evidence")
     if ev and ev.get("similarity", 0) >= 0.3:  # Method 3: the retrieved review that best matches the request
-        out += f" A reviewer said ({ev['stars']}★, {ev.get('year') or ''}): \"{ev['text'][:160].rstrip()}{'...' if len(ev['text']) > 160 else ''}\""
+        out += f" A reviewer said ({ev['stars']}★, {ev.get('year') or ''}): \"{snip(ev['text'], 160)}\""
     return out
 
 

@@ -21,7 +21,7 @@ from ..hours import DAYS, fmt_time
 from ..llm import text
 from ..security import safe_url
 from ..state import PlannerState
-from ..units import dist
+from ..units import dist, snip
 from .logistics import rooms_needed
 
 
@@ -358,9 +358,16 @@ def qa_node(state: PlannerState) -> dict:
             focus.append(s["place"])
     focus = list({p["id"]: p for p in focus}.values())
     req = state.get("request") or {}
-    center = cat.locate(req.get("city")) if req else None
+    from .planner import mentioned_az_city
+    asked_city = mentioned_az_city(q)
+    elsewhere = bool(asked_city and asked_city != req.get("city")
+                     and asked_city not in [lg["city"] for lg in req.get("legs") or []])
+    center = cat.locate(asked_city) if asked_city else (cat.locate(req.get("city")) if req else None)
     hits = cat.search(q, center=center, radius_km=40, k=4) if center else cat.search(q, k=4)
-    ctx = focus if focus else plan[:6] + [h for h in hits if h["id"] not in {p["id"] for p in plan}][:4]
+    if elsewhere:  # "best hikes near Sedona?" while planning Phoenix: answer about Sedona, not the plan
+        ctx = hits
+    else:
+        ctx = focus if focus else plan[:6] + [h for h in hits if h["id"] not in {p["id"] for p in plan}][:4]
     slot_of = {s["place"]["id"]: s for s in filled}
     from ..reviews_index import get_index
     rix = get_index(cat)  # Method 3: top-k real review snippets most similar to the question, per context place
@@ -372,7 +379,7 @@ def qa_node(state: PlannerState) -> dict:
         if p.get("likely_closed"):
             d["closure_warning"] = f"Probably closed: {p['closed_reason']}. Say so and do not recommend it."
         if rix is not None and p.get("_idx") is not None:
-            d["retrieved_reviews"] = [f"{r['stars']}★ ({r.get('year')}): {r['text'][:280]}"
+            d["retrieved_reviews"] = [f"{r['stars']}★ ({r.get('year')}): {snip(r['text'], 280)}"
                                       for r in rix.top_k(q, [int(p["_idx"])], k=2) if r["similarity"] >= 0.2]
         if s:  # it's in the traveler's plan: add the schedule facts
             d.update(in_plan_as=s["label"], scheduled_time=s.get("time"), est_cost_pp=s.get("cost_pp"),
@@ -381,27 +388,69 @@ def qa_node(state: PlannerState) -> dict:
         docs.append(d)
 
     def fallback() -> str:
+        """Answer in plain, friendly sentences about what was asked (used when GPT-4o isn't available)."""
         if not docs:
-            return "I couldn't find anything in the Arizona data for that."
+            return ("I couldn't find a good match for that in Arizona. Try naming a city or a place, "
+                    "or ask me about a stop in your plan.")
+        ql_ = ql
+        topic = next((k for k, rx in (("kids", r"\bkids?\b|child|family|toddler|stroller"),
+                                       ("access", r"wheelchair|accessib|mobility|walker"),
+                                       ("groups", r"\bgroup|big party|large party"),
+                                       ("cost", r"\bcost|price|expensive|cheap|how much|\$"),
+                                       ("hours", r"\bopen\b|hours|close|closing|when does"))
+                      if re.search(rx, ql_)), None)
+        flag = {"kids": "good_for_kids", "access": "wheelchair_entrance", "groups": "good_for_groups"}.get(topic)
+        in_plan = [d for d in docs if d.get("in_plan_as")]
+        pool = (in_plan or docs)[:4]
+        if flag and in_plan:
+            yes = [d for d in in_plan if d.get(flag)]
+            what = {"kids": "kid-friendly", "access": "wheelchair accessible", "groups": "good for groups"}[topic]
+            if len(in_plan) == 1:
+                lead = (f"Yes, {in_plan[0]['name']} is listed as {what}." if yes else
+                        f"{in_plan[0]['name']} isn't listed as {what}. Want me to swap it for a place that is?")
+            elif len(yes) == len(in_plan):
+                lead = f"Good news: every stop in your plan is listed as {what}."
+            elif yes:
+                lead = (f"{len(yes)} of your {len(in_plan)} stops are listed as {what}. "
+                        "Want me to swap the others for ones that are?")
+            else:
+                lead = f"None of these stops are listed as {what}. I can swap them for ones that are, just say the word."
+        elif in_plan and len(in_plan) > 1:
+            lead = "Here's a quick look at your stops:"
+        elif in_plan:
+            lead = f"Here's what I know about {in_plan[0]['name']}:"
+        else:
+            lead = "Here are a few places that fit:"
         out = []
-        for d in docs[:4]:
-            line = ""
-            if d.get("in_plan_as"):
-                line = f"In your plan, **{d['in_plan_as']}** is **{d['name']}**, {d['scheduled_time']}"
-                line += f" (~${d['est_cost_pp']:.0f}/person). " if d.get("est_cost_pp") else ". "
-                tags = [lbl for k, lbl in (("good_for_kids", "good for kids"), ("good_for_groups", "good for groups"),
-                                           ("wheelchair_entrance", "wheelchair-accessible entrance")) if d.get(k)]
-                if tags:
-                    line += f"Google tags it as {', '.join(tags)}. "
-            line += f"**{d['name']}** ({d['city']}) - {d['rating']}★, {int(d['reviews']):,} reviews. {d.get('description') or d['category']}."
-            if d.get("ev_love"):
-                line += f" Travelers love: {d['ev_love']}"
+        for d in pool:
+            when = (d.get("scheduled_time") or "").split(" - ")[0]
+            head = f"**{d['name']}**" + (f" ({d['in_plan_as'].lower()}, {when})" if d.get("in_plan_as") and when else f" in {d['city']}")
+            bits = [f"rated {d['rating']}★ by {int(d['reviews']):,} people"]
+            if d.get("est_cost_pp"):
+                bits.append(f"about ${d['est_cost_pp']:.0f} per person")
+            elif d.get("in_plan_as"):
+                bits.append("free")
+            sent = head + ": " + ", ".join(bits) + "."
+            nice = [lbl for k, lbl in (("good_for_kids", "great for kids"), ("wheelchair_entrance", "wheelchair accessible"),
+                                       ("good_for_groups", "good for groups")) if d.get(k)]
+            if nice:
+                sent += f" It's {', '.join(nice[:-1]) + ' and ' + nice[-1] if len(nice) > 1 else nice[0]}."
+            desc = d.get("description") or ""
+            if desc and desc.lower() != (d.get("category") or "").lower() and len(desc) > 25:
+                sent += f" {snip(desc, 140).rstrip('.')}."
             if d.get("retrieved_reviews"):
-                line += f" A reviewer said: \"{d['retrieved_reviews'][0][:220]}\""
-            if d.get("hours") and not d.get("in_plan_as"):
-                line += f" Hours (2021): {d['hours'][:120]}..."
-            out.append(line)
-        return "Here's what the data says:\n\n" + "\n\n".join(out)
+                m = re.match(r"(\d)★ \((\d{4}|None)\): (.*)", d["retrieved_reviews"][0], re.S)
+                if m:
+                    yr = f", {m.group(2)}" if m.group(2) != "None" else ""
+                    sent += f" One visitor ({m.group(1)}★{yr}) wrote: \"{snip(m.group(3), 170)}\""
+            elif d.get("ev_love"):
+                sent += f" Visitors love {snip(d['ev_love'], 120).rstrip('.')}."
+            if topic == "hours" and d.get("hours"):
+                sent += f" Listed hours: {snip(d['hours'], 120)} (check before you go)."
+            out.append(sent)
+        tail = ("\n\nWant me to swap any of these, find something nearby, or book a table?" if in_plan
+                else "\n\nWant me to add one of these to your plan?")
+        return lead + "\n\n" + "\n\n".join(out) + tail
 
     answer, how = text(prompts.QA, f"Question: {q}\n\nRetrieved records:\n{json.dumps(docs, default=str)[:10000]}", fallback)
     hist = (state.get("history") or []) + [{"role": "user", "content": state["user_message"]}, {"role": "assistant", "content": answer}]

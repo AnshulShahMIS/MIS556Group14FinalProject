@@ -72,6 +72,28 @@ def start(scenario: str) -> tuple[dict, dict]:
     return iv, question(iv, intro=sc["intro"])
 
 
+def start_from_request(message: str) -> tuple[dict, dict] | None:
+    """A typed trip request that leaves out WHERE: ask only what's missing (where, plus who / when / interests if
+    they're missing too), keep everything the traveler already said, and plan from all of it. None = no gaps."""
+    from .agents.planner import cities_in_order, parse_request_rules
+    t = (message or "").lower()
+    if cities_in_order(message) or "grand canyon" in t or re.search(r"\b8[56]\d{3}\b", t):  # a city or an AZ ZIP
+        return None
+    r = parse_request_rules(message)
+    known_who = bool(re.search(r"\b\d+\s*(?:people|persons|adults|kids|children|of us|friends|travelers|guests)\b|"
+                               r"family of|party of|group of|couple|solo|just me|my (?:wife|husband|partner|parents)|"
+                               r"\b(?:two|three|four|five|six|seven|eight|nine|ten|twelve)\s+(?:people|adults|kids|friends)", t))
+    known_when = bool(r.trip_date or r.weekday is not None or r.month or re.search(r"\bweek|weekend|tomorrow|today|tonight", t))
+    scenario = "family" if r.has_kids or "family" in t else "friends" if "friends" in t else "custom"
+    skip = ["needs", "food_budget", "extras"] + (["who"] if known_who else []) + (["when"] if known_when else []) \
+        + (["interests"] if r.interests else [])
+    iv = {"active": True, "scenario": scenario, "step": 0, "skip": skip,
+          "answers": {"base_note": message.strip(), "days": r.days}}
+    intro = ("Sounds like a great trip! A couple of quick questions so I plan the right places."
+             if r.days < 2 else f"Sounds like a great {r.days}-day trip! A couple of quick questions so I plan the right places.")
+    return iv, question(iv, intro=intro)
+
+
 def _q(iv: dict) -> tuple:
     while iv["step"] < len(QUESTIONS) and QUESTIONS[iv["step"]][0] in iv.get("skip", []):
         iv["step"] += 1
@@ -86,6 +108,9 @@ def question(iv: dict, intro: str | None = None, note: str | None = None) -> dic
                 "friends": "How many of you are going, and is everyone 21 or older?",
                 "game": "How many people are going?", "custom": "Who's coming?"}.get(sc, "Who's coming?")
         opts = WHO_OPTS.get(sc, WHO_OPTS["custom"])
+    if key == "where" and (iv["answers"].get("days") or 1) >= 3:
+        text = (f"Where in Arizona? For {iv['answers']['days']} days you can pick several cities, "
+                "in the order you'll visit them.")
     if key == "confirm":
         text = "Here's what I've got:\n\n" + summary(iv) + "\n\nShall I plan it? You can also type anything you'd like to add."
     default = [o for o in (iv["answers"].get(key) or []) if o in (opts or [])] if multi else []
@@ -163,6 +188,15 @@ def answer(iv: dict, message: str) -> tuple[dict, dict | None, bool]:
 
 def summary(iv: dict) -> str:
     a = iv["answers"]
+    if a.get("base_note"):
+        lines = [f"- **Your request:** {a['base_note']}", f"- **Where:** {a.get('where', 'Phoenix')}"]
+        if a.get("when"):
+            lines.append(f"- **When:** {a['when']}")
+        if a.get("who"):
+            lines.append(f"- **Who:** {a['who']}")
+        if a.get("interests") or a.get("interests_note"):
+            lines.append(f"- **Into:** {', '.join(a.get('interests') or []) or a.get('interests_note')}")
+        return "\n".join(lines)
     lines = [f"- **Where:** {a.get('where', 'Phoenix')}",
              f"- **When:** {a.get('when', 'Saturday')}"]
     if a.get("who"):
@@ -188,6 +222,21 @@ INTEREST_WORDS = {"Hiking & outdoors": "hiking and outdoors", "Museums & history
 def compose(iv: dict) -> str:
     """Turn the answers into one request sentence the Planner understands."""
     a, sc = iv["answers"], iv["scenario"]
+    if a.get("base_note"):
+        parts = [a["base_note"].rstrip(". "), f"in {a.get('where', 'Phoenix')}"]
+        if a.get("when"):
+            parts.append(a["when"])
+        if a.get("who"):
+            parts.append(a["who"])
+        if a.get("interests"):
+            parts.append("we like " + ", ".join(INTEREST_WORDS.get(i, i.lower()) for i in a["interests"]))
+        if a.get("interests_note"):
+            parts.append(a["interests_note"])
+        if (a.get("days") or 1) >= 2 and "hotel" not in a["base_note"].lower():
+            parts.append("and a hotel to stay overnight")
+        if a.get("final_note"):
+            parts.append(a["final_note"])
+        return ", ".join(p for p in parts if p)
     needs = a.get("needs") or ["Activities", "Lunch", "Dinner"]
     who = (a.get("who") or "").lower()
     parts = []

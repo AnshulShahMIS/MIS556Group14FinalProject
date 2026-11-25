@@ -303,3 +303,30 @@ def test_hot_day_breakfast_comes_after_the_sunrise_hike():
     out = Planner().ask("Weekend in Phoenix in July for 2, hiking and museums")
     day1 = [s for s in stops(out) if s["day"] == 1]
     assert day1[0]["label"] == "Sunrise activity" and day1[1]["label"] == "Breakfast"
+
+
+def test_typed_request_without_a_city_asks_only_whats_missing():
+    p = Planner()
+    out = p.ask("Hello I would like to book a family trip which includes 14 people. One person is not 21 yet so "
+                "I would like to plan a week long trip in Arizona in April")
+    q = out["interview"]["q"]
+    assert out["intent"] == "chat" and q["key"] == "where" and q["multi"] and "7-day" in out["answer"]
+    out = p.ask("Phoenix, Sedona, Grand Canyon")
+    assert out["interview"]["q"]["key"] == "interests"  # who and when were already given
+    out = p.ask("Hiking & outdoors")
+    assert out["interview"]["q"]["key"] == "confirm" and "Your request" in out["answer"]
+    r = p.ask("Plan it")["request"]
+    assert (r["days"], r["party_size"], r["month"], r["nightlife"], r["need_hotel"]) == (7, 14, 4, False, True)
+    assert [lg["city"] for lg in r["legs"]] == ["Phoenix", "Sedona", "Grand Canyon Village"]
+
+
+def test_answers_sound_natural():
+    p = Planner()
+    p.ask("Saturday in Phoenix for 2, hiking and Mexican food")
+    out = p.ask("tell me about the dinner spot")
+    assert out["intent"] == "question" and "the data says" not in out["answer"] and "Google tags" not in out["answer"]
+    assert "(dinner, " in out["answer"]
+    out = p.ask("best hikes near Sedona?")
+    assert "Sedona" in out["answer"] and "your stops" not in out["answer"]
+    from azmulti.units import snip
+    assert snip("one two three four", 10) == "one two…"

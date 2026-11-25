@@ -38,6 +38,13 @@ class Catalog:
                 self.df.name.str.contains(r"tourism office|visitors? bureau|chamber of commerce|convention|welcome center|information center",
                                           case=False, regex=True)
                 | self.df.primary_category.isin(["Tourist information center", "Visitor center"]) & (self.df.n_reviews < 200))
+        # Business offices are not places to visit ("Administrative Office", "(Office Only)", rangers' and yard
+        # offices, corporate parks, railroad companies); a theatre's box office or a go-kart venue stays.
+        self.df["not_a_destination"] = self.df["not_a_destination"].fillna(False).astype(bool) | (
+            self.df.name.str.contains(r"administrative office|administration office(?! and visitor)|\(office only\)|"
+                                      r"rangers? office|check-in office|yard office|corporate park|corporate office|"
+                                      r"business office", case=False, regex=True)
+            | self.df.primary_category.fillna("").eq("Railroad company"))
         if "kids_only" not in self.df:
             self.df["kids_only"] = False
         # Stadiums / arenas / event venues open for events, so their posted hours don't apply

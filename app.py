@@ -665,6 +665,32 @@ def page_quick():
                     ss["_goto"] = "itinerary"
 
 
+def reservation_panel(pnd: dict):
+    """The reservation request form, shown right under the stop it's for."""
+    hotel = pnd["kind"] == "lodging"
+    with st.container(border=True):
+        what = {"lodging": "Reserve a room at", "attraction": "Get tickets for"}.get(pnd["kind"], "Reserve a table at")
+        st.markdown(md(f"**{what} {pnd['name']}**"))
+        st.caption(f"{pnd.get('date', '')} · check the details, then send the request. Nothing is booked or paid until you "
+                   "finish on the booking site, which shows live availability.")
+        f = st.columns(3)
+        party = f[0].number_input("Guests" if hotel else "Party size", 1, 40, int(pnd["party"]), key="rsv_party")
+        if hotel:
+            rooms = f[1].number_input("Rooms", 1, 20, int(pnd.get("rooms", 1)), key="rsv_rooms")
+            nights = f[2].number_input("Nights", 1, 30, int(pnd.get("nights", 1)), key="rsv_nights")
+            msg = f"yes for {party} guests, {rooms} rooms, {nights} nights"
+        else:
+            times = [m for m in range(7 * 60, 23 * 60 + 1, 15)]
+            t0 = min(times, key=lambda m: abs(m - int(pnd["time_min"])))
+            tm = f[1].selectbox("Time", times, index=times.index(t0), format_func=fmt_time, key="rsv_time")
+            msg = f"yes at {tm // 60}:{tm % 60:02d} for {party}"
+        c1, c2, _ = st.columns([1.3, 1, 3])
+        if c1.button("Send request", icon=I["check"], type="primary", use_container_width=True):
+            act(msg, "Added to your reservations - finish it on the booking site")
+        if c2.button("Cancel", use_container_width=True):
+            act("no", "Cancelled - nothing was booked")
+
+
 def page_itinerary():
     if ss.get("_plan_next"):  # a plan requested from Quick plan: build it here, then show it
         with st.spinner("Your agents are planning your day..."):
@@ -726,6 +752,7 @@ def page_itinerary():
 
     res_by = {r["place_id"]: r for r in st_.get("reservations") or []}
     cur_day = None
+    shown_ids = {x['id'] for x in stops}
     for n, s in enumerate(stops, 1):
         p = s["place"]
         if req.get("days", 1) > 1 and s["day"] != cur_day:
@@ -784,11 +811,13 @@ def page_itinerary():
                 tickets = s["kind"] == "attraction"
                 if a[3].button("Tickets" if tickets else "Reserve", key=f"bk{n}", icon=I["book"], use_container_width=True,
                                help={"lodging": "Reserve a room", "attraction": "Get tickets or book a tour"}.get(s["kind"], "Reserve a table")):
-                    act(f"book stop {n}", "Request ready - check the details below")
+                    act(f"book stop {n}", "Request ready - check the details under this stop")
             elif a[3].button("Save", key=f"bk{n}", icon=I["save"], use_container_width=True):
                 act(f"save stop {n}", "Saved to favorites")
             if a[4].button("Remove", key=f"rm{n}", icon=I["remove"], use_container_width=True, disabled=len(stops) <= 1):
                 act(f"remove stop {n}", f"Removed stop {n}")
+            if (st_.get("pending") or {}).get("slot_id") == s["id"]:
+                reservation_panel(st_["pending"])  # right under this place
             if st.button("Closed for good? Replace it", key=f"cl{n}", type="tertiary", icon=I["warn"],
                          help="If this place has shut down, I'll replace it and never recommend it again"):
                 act(f"stop {n} is permanently closed", f"Replaced stop {n} - it won't be recommended again")
@@ -833,30 +862,9 @@ def page_itinerary():
         ss.chat.append({"role": "assistant", "content": "What would you like to add? For example *add a coffee stop after stop 1* or *add dessert after dinner*."})
         ss["_goto"] = "chat"
 
-    if st_.get("pending"):
-        pnd = st_["pending"]
-        hotel = pnd["kind"] == "lodging"
-        with st.container(border=True):
-            what = {"lodging": "Reserve a room at", "attraction": "Get tickets for"}.get(pnd["kind"], "Reserve a table at")
-            st.markdown(md(f"**{what} {pnd['name']}**"))
-            st.caption(f"{pnd.get('date', '')} · check the details, then send the request. Nothing is booked or paid until you "
-                       "finish on the booking site, which shows live availability.")
-            f = st.columns(3)
-            party = f[0].number_input("Guests" if hotel else "Party size", 1, 40, int(pnd["party"]), key="rsv_party")
-            if hotel:
-                rooms = f[1].number_input("Rooms", 1, 20, int(pnd.get("rooms", 1)), key="rsv_rooms")
-                nights = f[2].number_input("Nights", 1, 30, int(pnd.get("nights", 1)), key="rsv_nights")
-                msg = f"yes for {party} guests, {rooms} rooms, {nights} nights"
-            else:
-                times = [m for m in range(7 * 60, 23 * 60 + 1, 15)]
-                t0 = min(times, key=lambda m: abs(m - int(pnd["time_min"])))
-                tm = f[1].selectbox("Time", times, index=times.index(t0), format_func=fmt_time, key="rsv_time")
-                msg = f"yes at {tm // 60}:{tm % 60:02d} for {party}"
-            c1, c2, _ = st.columns([1.3, 1, 3])
-            if c1.button("Send request", icon=I["check"], type="primary", use_container_width=True):
-                act(msg, "Added to your reservations - finish it on the booking site")
-            if c2.button("Cancel", use_container_width=True):
-                act("no", "Cancelled - nothing was booked")
+    pnd = st_.get("pending")
+    if pnd and pnd.get("slot_id") not in shown_ids:  # asked for in chat for a stop not shown here: keep it visible
+        reservation_panel(pnd)
 
     st.divider()
     t_budget, t_book, t_how = st.tabs(["Budget", "Bookings & events", "How it was planned"])

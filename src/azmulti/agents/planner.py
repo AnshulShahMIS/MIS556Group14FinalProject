@@ -117,6 +117,9 @@ def parse_request_rules(text: str) -> TripRequest:
     for word, mo in {"summer": 7, "winter": 1, "spring": 3, "fall": 10, "autumn": 10}.items():
         if word in t and r.month is None:
             r.month = mo
+    m_wk = re.search(r"\b(?:a|one|1)[- ]?week(?:[- ]long)?\b|\bweek[- ]long\b|\bfor (?:a|one) week\b|\b(two|2)[- ]weeks?\b", t)
+    if m_wk:
+        r.days = MAX_DAYS if m_wk.group(1) else 7
     m = re.search(r"\b(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)[- ]days?\b", t)
     if m and not re.search(r"\b(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)[- ]days?\s+(in|at)\b", t):
         r.days = max(1, min(MAX_DAYS, _num(m.group(1)) or 1))
@@ -478,8 +481,12 @@ SMALLTALK = (r"^\W*(hi|hello|hey|hiya|howdy|yo|sup|thanks|thank you|thx|ty|ok|ok
 
 def is_question(text: str) -> bool:
     t = text.lower().strip()
-    return ("?" in t and len(re.findall(r"[a-z]{2,}", t)) >= 2 and not re.search(SMALLTALK, t)
-            and not re.search(r"\b(plan|itinerary|schedule)\b", t))
+    # a question mark, or a sentence that starts like a question ("tell me about the dinner spot")
+    asks = "?" in t or re.match(r"(tell me (about|more)|what('s| is| are| about)|how (is|are|much|long|far|good)|"
+                                r"is (the|it|there|this|that)|are (there|they|the)|does |do they|can (we|i|kids|you)|"
+                                r"which |where (is|are|can)|when (does|do|is))\b", t)
+    return bool(asks and len(re.findall(r"[a-z]{2,}", t)) >= 2 and not re.search(SMALLTALK, t)
+                and not re.search(r"\b(plan|itinerary|schedule)\b", t))
 
 
 # ---------------------------------------------------------------- request modifiers ("make it Sunday")
@@ -775,6 +782,15 @@ def _interview_turn(state: PlannerState, msg: str) -> tuple[dict | None, str]:
     if scen and not (has_plan and scen == "custom"):
         iv, q = IV.start(scen)
         return reply(q["text"], {**iv, "q": q}, f"started guided questions ({IV.SCENARIOS[scen]['title']})"), msg
+    # a typed trip request with no city: ask the missing details (tap-to-answer) instead of guessing Phoenix
+    cmd = route_command(msg, state) if not has_plan else None
+    if (not has_plan and has_trip_signal(msg) and not is_question(msg) and not non_az_place(msg)
+            and not parse_revision_rules(msg)
+            and (not cmd or cmd["cmd"] in PLAN_BOUND_CMDS)):  # "book a family trip" is a trip, not a reservation
+        started = IV.start_from_request(msg)
+        if started:
+            iv, q = started
+            return reply(q["text"], {**iv, "q": q}, "asked for the missing trip details"), msg
     return None, msg
 
 
