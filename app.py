@@ -668,14 +668,18 @@ def top_bar():
         # so it is right even when the theme was changed from Streamlit's own menu)
         if st.button("Dark mode", icon=":material/dark_mode:", type="tertiary", key="theme_btn",
                      help="Switch between the light and dark look"):
-            ss["_theme_switch"] = ss.get("_theme_switch", 0) + 1
+            import secrets
+            ss["_theme_switch"] = secrets.token_hex(6)  # one id per click (see below)
         key_clicked = st.button("OpenAI key", icon=I["key"], type="tertiary")
         prefs_clicked = st.button("Preferences", icon=I["prefs"], type="tertiary")
         new_clicked = st.button("New trip", icon=I["new"], type="tertiary",
                                 help="Start a new trip - the current one is kept under My trips")
-    if ss.get("_theme_switch"):  # Streamlit's own theme setting (menu > Light / Dark), clicked for the visitor
-        components.html("<script>/*%d*/%s</script>" % (ss["_theme_switch"], in_app_page(
-            THEME_SRC + "window.__azPick(document.documentElement.classList.contains('az-dark')?'Light':'Dark');")), height=0)
+    if ss.get("_theme_switch"):  # flip the theme once per click. Streamlit may draw this frame again later (another
+        # page, a reconnect), so the click's id is remembered in the tab and a repeat does nothing
+        nid = ss["_theme_switch"]
+        components.html("<script>%s</script>" % in_app_page(
+            THEME_SRC + f"if(sessionStorage.getItem('azSwitch')!=='{nid}'){{sessionStorage.setItem('azSwitch','{nid}');"
+            "window.__azPick(document.documentElement.classList.contains('az-dark')?'Light':'Dark');}"), height=0)
     if key_clicked:
         key_dialog()
     elif prefs_clicked:
