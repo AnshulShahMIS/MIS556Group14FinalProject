@@ -111,19 +111,26 @@ The header shows which AI is planning (**AI Built In Planner**, or GPT-4o with a
 Light mode**, **OpenAI key** (use your own key for this session), **Preferences** (what Saguaro remembers, favorites,
 live-data status, about), **New trip** and **Sign in**.
 
-### Accounts
+### Accounts and trip confirmations
 
-Planning works without an account. **Sign in → Create account** (username + password, no email) keeps your
-preferences, favorites and trips, on any device; **Keep me signed in** remembers the browser for 30 days. Once signed
-in, the username in the header opens **Sign out**, **Change password** and **Delete my account**.
+Planning works without an account. **Sign in → Create account** asks for an email, a password and (optionally) a first
+name, then emails a **6-digit code**; the account is created once the code is entered, so nobody can sign up with
+someone else's address. **Keep me signed in** remembers the browser for 30 days, and **Forgot your password?** emails a
+code to set a new one. Once signed in, the name in the header opens **Sign out**, **Change password** and **Delete my
+account**; preferences, favorites and trips belong to the account, on any device.
 
-- Passwords are never stored: only a salted PBKDF2-SHA256 hash (200,000 rounds). Wrong-password messages don't say
-  whether the username exists, and 5 misses lock a username for 5 minutes.
-- "Keep me signed in" puts a random token in a browser cookie; only its hash is stored, and signing out deletes it.
-- Accounts, preferences and trips are JSON files in a **private GitHub repository** (secrets `AZ_STORE_REPO` and
-  `AZ_STORE_TOKEN`, see DEPLOY.md), so they survive app updates; without those secrets they're local files under
-  `data/accounts/` (not committed). Code: `src/azmulti/accounts.py`, `store.py`, `profiles.py`; tests:
-  `tests/test_accounts.py`.
+**Confirm trip** (on the trip card) emails the whole itinerary - day by day, with times, places, links and costs, the
+budget and the Google Maps route - plus a calendar file, to the account's email, and marks the trip **Confirmed** in
+My trips. If the trip changes afterwards, the button becomes **Send update**.
+
+- Passwords and codes are never stored: only salted hashes (PBKDF2-SHA256, 200,000 rounds for passwords). Wrong
+  passwords get the same message whether or not the email has an account; 5 misses lock it for 5 minutes; a code
+  allows 5 tries and lasts 15 minutes.
+- Accounts, preferences and trips are JSON files in a **private GitHub repository** (secrets `AZ_STORE_REPO`,
+  `AZ_STORE_TOKEN`); emails go through Gmail (secrets `AZ_SMTP_USER`, `AZ_SMTP_PASSWORD`) - see DEPLOY.md. Without
+  them, accounts are local files under `data/accounts/` and emails are saved to `data/outbox/` (both not committed),
+  and the sign-up window shows the code on screen.
+- Code: `src/azmulti/accounts.py`, `mailer.py`, `confirm.py`, `store.py`, `profiles.py`; tests: `tests/test_accounts.py`.
 
 The previous design is saved as the git tag `v1-classic-ui` (`git checkout v1-classic-ui -- app.py .streamlit/config.toml`
 brings it back).

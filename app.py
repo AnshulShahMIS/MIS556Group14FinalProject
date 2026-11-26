@@ -76,6 +76,8 @@ h1 { letter-spacing: -0.01em; }
 .az-trip-art { height: 110px; position: relative; background: var(--l); }
 .az-trip-badge { position: absolute; left: 12px; top: 12px; font-size: 0.78rem; font-weight: 500; padding: 4px 10px;
   border-radius: 999px; background: #FFFFFF; color: #6B2F16; }
+.az-trip-badge.az-confirmed { left: auto; right: 12px; background: #E3EFE6; color: #24502F; }
+.az-dark .az-trip-badge.az-confirmed { background: #1E2B22; color: #9CC9A3; }
 .az-trip-text { padding: 12px 16px 4px; display: flex; flex-direction: column; gap: 4px; }
 .az-trip-text b { font-size: 1.1rem; font-weight: 600; }
 .az-trip-text span { font-size: 0.88rem; color: #6E6259; }
@@ -589,40 +591,139 @@ def sign_out(delete: bool = False):
     ss["_goto"] = "plan"
 
 
+def _outbox_note(msg: str):
+    if "isn't set up" in msg:  # email sending isn't configured on this copy of the app (see DEPLOY.md)
+        st.caption("Once the app's email is set up, codes and trip confirmations are emailed instead.")
+
+
 @st.dialog("Your Saguaro account")
 def account_dialog():
-    st.caption("An account keeps your preferences, favorites and trips, so they're there next time, on any device. "
-               "Planning works without one too.")
+    st.caption("An account keeps your preferences, favorites and trips, so they're there next time, on any device, and "
+               "lets you get trip confirmations by email. Planning works without one too.")
     t_in, t_new = st.tabs(["Sign in", "Create account"])
-    with t_in, st.form("sign_in", border=False):
-        user = st.text_input("Username", max_chars=30, autocomplete="username")
-        pw = st.text_input("Password", type="password", max_chars=128, autocomplete="current-password")
-        keep = st.checkbox("Keep me signed in on this device", value=True)
-        if st.form_submit_button("Sign in", type="primary", use_container_width=True):
-            if not ss.login_limit.allow():
-                st.error(f"Too many tries - wait {ss.login_limit.retry_in()} s.")
+    with t_in:
+        with st.form("sign_in", border=False):
+            email = st.text_input("Email", max_chars=254, autocomplete="email")
+            pw = st.text_input("Password", type="password", max_chars=128, autocomplete="current-password")
+            keep = st.checkbox("Keep me signed in on this device", value=True)
+            if st.form_submit_button("Sign in", type="primary", use_container_width=True):
+                if not ss.login_limit.allow():
+                    st.error(f"Too many tries - wait {ss.login_limit.retry_in()} s.")
+                else:
+                    ok, msg, acc = accounts.sign_in(email, pw)
+                    if ok:
+                        finish_sign_in(acc, keep, msg)
+                    st.error(msg)
+        with st.expander("Forgot your password?", expanded=bool(ss.get("_reset"))):
+            rs = ss.get("_reset")
+            if not rs:
+                r_email = st.text_input("Your account's email", max_chars=254, key="reset_email")
+                if st.button("Email me a code", key="reset_send", use_container_width=True):
+                    if not ss.login_limit.allow():
+                        st.error(f"Too many tries - wait {ss.login_limit.retry_in()} s.")
+                    else:
+                        ok, msg, pending = accounts.start_reset(r_email)
+                        if ok:
+                            ss["_reset"] = pending
+                            ss["_reset_msg"] = msg
+                            st.rerun(scope="fragment")
+                        st.error(msg)
             else:
-                ok, msg, acc = accounts.sign_in(user, pw)
-                if ok:
-                    finish_sign_in(acc, keep, msg)
-                st.error(msg)
-    with t_new, st.form("sign_up", border=False):
-        user = st.text_input("Choose a username", max_chars=30, autocomplete="username",
-                             help="3-30 letters, numbers, dots, dashes or underscores")
-        pw = st.text_input("Password", type="password", max_chars=128, autocomplete="new-password",
-                           help=f"At least {accounts.MIN_PASSWORD} characters")
-        pw2 = st.text_input("Type it again", type="password", max_chars=128, autocomplete="new-password")
-        keep = st.checkbox("Keep me signed in on this device", value=True, key="keep_new")
-        st.caption("Your password is never stored, only a scrambled (hashed) version of it. No email needed. "
-                   "There's no password reset, so keep it somewhere safe.")
-        if st.form_submit_button("Create account", type="primary", use_container_width=True):
-            if not ss.login_limit.allow():
-                st.error(f"Too many tries - wait {ss.login_limit.retry_in()} s.")
-            else:
-                ok, msg, acc = accounts.create_account(user, pw, pw2)
-                if ok:
-                    finish_sign_in(acc, keep, msg)
-                st.error(msg)
+                st.info(ss.get("_reset_msg", "Check your email for a 6-digit code."), icon=":material/mail:")
+                _outbox_note(ss.get("_reset_msg", ""))
+                with st.form("reset_form", border=False):
+                    code = st.text_input("6-digit code", max_chars=6)
+                    new = st.text_input("New password", type="password", autocomplete="new-password")
+                    new2 = st.text_input("New password again", type="password", autocomplete="new-password")
+                    if st.form_submit_button("Set new password", type="primary", use_container_width=True):
+                        ok, msg = accounts.finish_reset(rs, code, new, new2)
+                        if ok:
+                            ss.pop("_reset", None)
+                            st.success(msg + " Sign in above.")
+                        else:
+                            st.error(msg)
+                c1, c2 = st.columns(2)
+                if c1.button("Send a new code", key="reset_resend", use_container_width=True):
+                    ok, msg = accounts.resend_code(rs, "reset")
+                    (st.success if ok else st.error)(msg)
+                if c2.button("Start over", key="reset_cancel", use_container_width=True):
+                    ss.pop("_reset", None)
+                    st.rerun(scope="fragment")
+    with t_new:
+        su = ss.get("_signup")
+        if not su:
+            with st.form("sign_up", border=False):
+                name = st.text_input("Your first name (optional)", max_chars=40, autocomplete="given-name")
+                email = st.text_input("Email", max_chars=254, autocomplete="email", key="su_email")
+                pw = st.text_input("Password", type="password", max_chars=128, autocomplete="new-password",
+                                   help=f"At least {accounts.MIN_PASSWORD} characters")
+                pw2 = st.text_input("Type it again", type="password", max_chars=128, autocomplete="new-password")
+                st.checkbox("Keep me signed in on this device", value=True, key="keep_new")
+                st.caption("We'll email you a 6-digit code to confirm the address. Your password is never stored, only "
+                           "a scrambled (hashed) version of it, and your email is used only for your codes and trip "
+                           "confirmations.")
+                if st.form_submit_button("Email me a code", type="primary", use_container_width=True):
+                    if not ss.login_limit.allow():
+                        st.error(f"Too many tries - wait {ss.login_limit.retry_in()} s.")
+                    else:
+                        ok, msg, pending = accounts.start_signup(email, pw, pw2, name)
+                        if ok:
+                            ss["_signup"] = pending
+                            ss["_signup_msg"] = msg
+                            st.rerun(scope="fragment")
+                        st.error(msg)
+        else:
+            st.info(ss.get("_signup_msg", "Check your email for a 6-digit code."), icon=":material/mail:")
+            _outbox_note(ss.get("_signup_msg", ""))
+            with st.form("sign_up_code", border=False):
+                code = st.text_input("6-digit code", max_chars=6)
+                if st.form_submit_button("Create my account", type="primary", use_container_width=True):
+                    ok, msg, acc = accounts.finish_signup(su, code)
+                    if ok:
+                        ss.pop("_signup", None)
+                        finish_sign_in(acc, bool(ss.get("keep_new", True)), msg)
+                    st.error(msg)
+            c1, c2 = st.columns(2)
+            if c1.button("Send a new code", use_container_width=True):
+                ok, msg = accounts.resend_code(su, "signup")
+                (st.success if ok else st.error)(msg)
+            if c2.button("Change details", use_container_width=True):
+                ss.pop("_signup", None)
+                st.rerun(scope="fragment")
+
+
+@st.dialog("Confirm your trip")
+def confirm_dialog():
+    st_ = plan_state()
+    acc = ss.planner.account
+    if not st_:
+        st.caption("Plan a trip first.")
+        return
+    req = st_.get("request") or {}
+    stops = [s for s in st_["slots"] if s.get("place")]
+    title = " → ".join(lg["city"] for lg in req.get("legs") or []) or req.get("city", "")
+    days = req.get("days", 1)
+    st.markdown(md(f"**{title}** · {days} day{'s' if days > 1 else ''} · {req.get('party_size', 2)} travelers · "
+                   f"{len(stops)} stops"))
+    b = st_.get("budget") or {}
+    if b.get("total_pp") is not None:
+        st.caption(f"About ${b['total_pp']:.0f} per person")
+    if not acc:
+        st.info("Sign in (top right) to confirm - the confirmation is emailed to your account's address and the trip "
+                "is saved to your account.", icon=I["user"])
+        return
+    st.caption(md(f"We'll email the full itinerary, with a calendar file you can add to your calendar, to "
+                  f"**{acc['email']}**, and mark the trip as confirmed in My trips. Nothing is booked or paid - "
+                  "reservations are made on the booking sites."))
+    if st.button("Confirm and email my trip", icon=":material/mail:", type="primary", use_container_width=True):
+        with st.spinner("Sending..."):
+            ok, msg = ss.planner.confirm_trip()
+        if ok:
+            st.toast("Trip confirmed - " + ("check your email." if "outbox" not in msg else
+                                            "email isn't set up on this copy of the app, so nothing was sent."),
+                     icon=I["check"])
+            st.rerun()
+        st.error(msg)
 
 
 @st.dialog("Preferences & privacy", width="large")
@@ -630,7 +731,7 @@ def prefs_dialog():
     st.markdown("**Your account**")
     acc = ss.planner.account
     if acc:
-        st.caption(md(f"Signed in as **{acc['username']}**. Your preferences, favorites and trips are saved to your account. "
+        st.caption(md(f"Signed in as **{acc.get('email') or acc['username']}**. Your preferences, favorites and trips are saved to your account. "
                       "Use the account menu (top right) to sign out, change your password or delete your account."))
     else:
         st.caption("You're not signed in, so nothing is kept after you leave. Sign in (top right) to keep your preferences, "
@@ -659,7 +760,8 @@ def prefs_dialog():
     st.caption("Saguaro is a team of AI agents (MIS 556, Group 14): Planner, Weather & Events, Attraction, Dining & Nightlife, "
                "Live Info, Route, Budget, a Critic that scores and fixes the plan, Booking, and a Concierge that writes it up. "
                f"Data: {len(get_catalog().df):,} Arizona places from Google Maps (2021) and TripAdvisor (2026). Your OpenAI key stays in this "
-               "session only; trip details are sent only to the live services above.")
+               "session only; trip details are sent only to the live services above, and to your own email when you "
+               "confirm a trip.")
 
 
 ASPECT = {"food_quality": "Food", "service": "Service", "value": "Value", "wait_time": "Wait times", "cleanliness": "Cleanliness",
@@ -742,8 +844,8 @@ def top_bar():
         acc = ss.planner.account
         if acc:  # signed in: an account menu under the username
             with st.popover(acc["username"], icon=I["user"], type="tertiary"):
-                st.caption(md(f"Signed in as **{acc['username']}**. Your preferences, favorites and trips are saved "
-                              "to your account."))
+                st.caption(md(f"Signed in as **{acc.get('email') or acc['username']}**. Your preferences, favorites "
+                              "and trips are saved to your account."))
                 if st.button("Sign out", icon=":material/logout:", use_container_width=True):
                     sign_out()
                 with st.expander("Change password"):
@@ -1189,9 +1291,19 @@ def trip_panel(st_: dict):
     by_day = (cond or {}).get("by_day") or {}
 
     with card():
-        h = st.columns([5, 1], vertical_alignment="center")
+        h = st.columns([4, 1.45, 1], vertical_alignment="center")
         h[0].header(title, anchor=False)
-        if h[1].button("Share", icon=I["share"], use_container_width=True, help="Plan together: share this trip with a code"):
+        conf = ss.planner.trip_confirmation()
+        if conf and not conf["changed"]:
+            label, kind, tip = "Confirmed", "secondary", "Confirmed and emailed - click to send it again"
+        elif conf:
+            label, kind, tip = "Send update", "primary", "You changed the trip since confirming - email the new version"
+        else:
+            label, kind, tip = "Confirm trip", "primary", "Email yourself the itinerary and a calendar file"
+        if h[1].button(label, icon=":material/task_alt:" if conf and not conf["changed"] else ":material/mail:",
+                       type=kind, use_container_width=True, help=tip):
+            confirm_dialog()
+        if h[2].button("Share", icon=I["share"], use_container_width=True, help="Plan together: share this trip with a code"):
             ss["_goto"] = "group"
         st.caption(" · ".join(x for x in [
             day_txt, f"{req.get('party_size', 2)} {'travelers' if req.get('party_size', 2) > 1 else 'traveler'}",
@@ -1613,7 +1725,9 @@ def page_trips():
                                            f"about ${t['cost_pp']:.0f} per person" if t.get("cost_pp") else ""] if x)
             with col, st.container(key=f"tripcard-{t['id']}" + ("-current" if current else "")):
                 st.html(f'<div class="az-trip-art" style="--l:{light};--d:{dark}">'
-                        + ('<span class="az-trip-badge">Current trip</span>' if current else "") + "</div>"
+                        + ('<span class="az-trip-badge">Current trip</span>' if current else "")
+                        + ('<span class="az-trip-badge az-confirmed">Confirmed</span>' if t.get("confirmed_at") else "")
+                        + "</div>"
                         f'<div class="az-trip-text"><b>{esc(t.get("city") or "Trip")}</b><span>{esc(line1)}</span>'
                         f'<span>{esc(line2)}</span>'
                         + (f'<span class="az-trip-hl">{esc(snip(", ".join(t.get("highlights") or []), 70))}</span>'

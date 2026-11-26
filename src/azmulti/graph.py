@@ -228,7 +228,7 @@ class Planner:
     def sign_in(self, account: dict) -> None:
         """Use this account's saved preferences and trips from now on. Trips planned before signing in, in
         this visit, are added to the account; preferences learned this visit are merged in."""
-        self.account = {"id": account["id"], "username": account["username"]}
+        self.account = {k: account.get(k) for k in ("id", "username", "email", "name")}
         saved = load_profile(self._aid)
         for k in ("cuisines", "interests", "liked_categories", "disliked_categories"):
             for item, n in (self.profile.get(k) or {}).items():
@@ -292,6 +292,9 @@ class Planner:
                "highlights": [s["place"]["name"] for s in stops[:3]],
                "saved_at": _dt.now().isoformat(timespec="minutes"),
                "state": {k: st.get(k) for k in self.TRIP_KEYS if st.get(k) is not None}}
+        old = next((t for t in self.trips if t["id"] == tid), None)
+        if old:  # keep the confirmation mark (trip_confirmation() tells whether the plan changed since)
+            rec.update({k: old[k] for k in ("confirmed_at", "confirmed_sig") if k in old})
         self.trips = [t for t in self.trips if t["id"] != tid]
         self.trips.insert(0, rec)
         self.trips = self.trips[:self.MAX_TRIPS]
@@ -299,6 +302,39 @@ class Planner:
             self.trip_id = tid
         save_trips(self._aid, self.trips)
         return tid
+
+    @staticmethod
+    def _plan_sig(st: dict) -> str:
+        import hashlib
+        stops = [(s.get("day"), s.get("time"), (s.get("place") or {}).get("id")) for s in st.get("slots") or [] if s.get("place")]
+        return hashlib.sha256(repr((stops, (st.get("request") or {}).get("party_size"))).encode()).hexdigest()[:16]
+
+    def trip_confirmation(self) -> dict | None:
+        """For the current trip: {"at": when it was confirmed, "changed": whether the plan changed since}, or None."""
+        rec = next((t for t in self.trips if t["id"] == self.trip_id), None) if self.trip_id else None
+        if not rec or not rec.get("confirmed_at"):
+            return None
+        return {"at": rec["confirmed_at"], "changed": rec.get("confirmed_sig") != self._plan_sig(self.state())}
+
+    def confirm_trip(self) -> tuple[bool, str]:
+        """Email the current trip's itinerary to the signed-in account and mark the trip confirmed."""
+        from datetime import datetime as _dt
+        from . import confirm, mailer
+        if not self.account or not self.account.get("email"):
+            return False, "Sign in to confirm a trip - the confirmation goes to your account's email."
+        st = self.state()
+        if not any(s.get("place") for s in st.get("slots") or []):
+            return False, "There's no trip to confirm yet."
+        subject, text, html, files = confirm.build(st, self.account.get("name") or "")
+        ok, msg = mailer.send(self.account["email"], subject, text, html, files)
+        if not ok:
+            return False, msg
+        tid = self.save_trip()
+        rec = next(t for t in self.trips if t["id"] == tid)
+        rec["confirmed_at"] = _dt.now().isoformat(timespec="minutes")
+        rec["confirmed_sig"] = self._plan_sig(st)
+        save_trips(self._aid, self.trips)
+        return True, msg
 
     def open_trip(self, trip_id: str) -> bool:
         """Make a saved trip the current plan again (the current one stays saved)."""

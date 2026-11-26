@@ -82,6 +82,23 @@ AZ_STORE_TOKEN = "github_pat_..."
 The token never appears in the code, logs or the app. Without these two secrets the app still works, but accounts are
 kept only until the next update.
 
+### Email (sign-up codes and trip confirmations)
+
+Saguaro sends email through a Gmail account:
+
+1. Use (or create) the Gmail account the emails should come from. Turn on **2-Step Verification**
+   (Google Account → Security).
+2. Google Account → Security → **App passwords** → create one named "Saguaro". Google shows a 16-letter password once.
+3. In the Streamlit app's **Settings → Secrets**, add:
+
+```toml
+AZ_SMTP_USER = "your.address@gmail.com"
+AZ_SMTP_PASSWORD = "the 16-letter app password"
+```
+
+The app password only lets Saguaro send mail; it is never shown or logged, and you can revoke it any time in the same
+Google page. Without these secrets the app still works: sign-up shows the code on screen and nothing is emailed.
+
 ## 3. Updating the app later
 
 Change the code, then:
