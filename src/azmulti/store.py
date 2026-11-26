@@ -71,18 +71,27 @@ class LocalStore:
         if p.exists():
             p.unlink()
 
+    def list(self, folder: str) -> list[str]:
+        """Keys of the .json files directly in a folder, e.g. list("trips") -> ["trips/ab12.json", ...]."""
+        d = self.root / folder.strip("/")
+        return sorted(f"{folder.strip('/')}/{f.name}" for f in d.glob("*.json")) if d.is_dir() else []
+
     def flush(self, timeout: float = 0) -> None:  # same API as GitHubStore
         return None
 
 
 class GitHubStore:
-    """JSON files in a private GitHub repo. Reads are cached; writes are queued and sent in order."""
+    """JSON files in a private GitHub repo. Reads are cached for a couple of minutes (other writers, like the daily
+    reminder job, may change a file); writes are queued and sent in order."""
     kind = "github"
     API = "https://api.github.com"
+    CACHE_SECONDS = 120
 
     def __init__(self, repo: str, token: str, branch: str = "main"):
         self.repo, self._token, self.branch = repo, token, branch
         self._cache: dict[str, object] = {}
+        self._read_at: dict[str, float] = {}
+        self._pending: dict[str, int] = {}  # queued writes per file: the cache is newer than GitHub until they land
         self._sha: dict[str, str | None] = {}
         self._lock = threading.Lock()
         self._q: queue.Queue = queue.Queue()
@@ -121,12 +130,15 @@ class GitHubStore:
     def get(self, key: str):
         key = _clean_key(key)
         with self._lock:
-            if key in self._cache:
+            fresh = time.time() - self._read_at.get(key, 0) < self.CACHE_SECONDS
+            if key in self._cache and (fresh or self._pending.get(key)):
                 return _copy(self._cache[key])  # a copy: callers may change what they get
         value = self._fetch(key)
         with self._lock:
-            self._cache.setdefault(key, value)
-            return _copy(self._cache[key])
+            if not self._pending.get(key):  # a write queued meanwhile is newer than what was just read
+                self._cache[key] = value
+                self._read_at[key] = time.time()
+            return _copy(self._cache.get(key))
 
     def put(self, key: str, value) -> None:
         key = _clean_key(key)
@@ -135,13 +147,25 @@ class GitHubStore:
             if key in self._cache and json.dumps(self._cache[key], default=str, indent=1) == text:
                 return  # unchanged: no commit
             self._cache[key] = json.loads(text)
+            self._pending[key] = self._pending.get(key, 0) + 1
         self._q.put(("put", key, text))
 
     def delete(self, key: str) -> None:
         key = _clean_key(key)
         with self._lock:
             self._cache[key] = None
+            self._pending[key] = self._pending.get(key, 0) + 1
         self._q.put(("delete", key, None))
+
+    def list(self, folder: str) -> list[str]:
+        """Keys of the .json files directly in a folder of the repo."""
+        folder = folder.strip("/")
+        if ".." in folder:
+            raise ValueError("bad folder")
+        status, data = self._call("GET", folder)
+        if status != 200 or not isinstance(data, list):
+            return []
+        return sorted(f"{folder}/{x['name']}" for x in data if x.get("type") == "file" and x.get("name", "").endswith(".json"))
 
     def flush(self, timeout: float = 10) -> None:
         """Wait (up to `timeout` s) until queued writes are sent. Used before sign-out and in tests."""
@@ -180,6 +204,9 @@ class GitHubStore:
                     log.warning("github store %s %s: HTTP %s", op, key.split("/")[0], status)
                     break
             finally:
+                with self._lock:
+                    self._pending[key] = max(0, self._pending.get(key, 1) - 1)
+                    self._read_at[key] = time.time()
                 self._q.task_done()
 
 

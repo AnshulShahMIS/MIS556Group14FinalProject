@@ -99,6 +99,14 @@ AZ_SMTP_PASSWORD = "the 16-letter app password"
 The app password only lets Saguaro send mail; it is never shown or logged, and you can revoke it any time in the same
 Google page. Without these secrets the app still works: sign-up shows the code on screen and nothing is emailed.
 
+### Trip reminders (daily GitHub Action)
+
+The app sleeps when nobody is using it, so checklist reminders are sent by a GitHub Action in this repository
+(`.github/workflows/reminders.yml`, every day at 8 am Arizona time). It needs the same four values as the app, saved as
+**Actions secrets** in this repository (GitHub → this repo → Settings → Secrets and variables → Actions → New repository
+secret): `AZ_STORE_REPO`, `AZ_STORE_TOKEN`, `AZ_SMTP_USER`, `AZ_SMTP_PASSWORD`. Until they're added the Action runs and
+does nothing. To try it straight away: Actions tab → Trip reminders → Run workflow.
+
 ## 3. Updating the app later
 
 Change the code, then:

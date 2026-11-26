@@ -736,9 +736,11 @@ def confirm_dialog():
     st.caption(md(f"We'll email the full itinerary, with a calendar file you can add to your calendar, to "
                   f"**{acc['email']}**, and mark the trip as confirmed in My trips. Nothing is booked or paid - "
                   "reservations are made on the booking sites."))
+    remind = st.checkbox("Also email me reminders before my trip", value=True,
+                         help="What to book or check, a few days ahead (see the Checklist tab). Turn off any time.")
     if st.button("Confirm and email my trip", icon=":material/mail:", type="primary", use_container_width=True):
         with st.spinner("Sending..."):
-            ok, msg = ss.planner.confirm_trip()
+            ok, msg = ss.planner.confirm_trip(remind=remind)
         if ok:
             st.toast("Trip confirmed - " + ("check your email." if "outbox" not in msg else
                                             "email isn't set up on this copy of the app, so nothing was sent."),
@@ -1346,6 +1348,9 @@ def trip_panel(st_: dict):
             chips.append(f":green-badge[{hotels} hotel night{'s' if hotels > 1 else ''}]")
         chips.append(f":gray-badge[Travel {(st_.get('route') or {}).get('minutes', 0)} min]")
         chips.append(f":violet-badge[Plan score {q.get('total', 0):.0f}/100]")
+        todo = sum(1 for i in ss.planner.checklist()[0] if not i["done"])
+        if todo:
+            chips.append(f":red-badge[{todo} to do before you go]")
         st.markdown(" ".join(chips), help="Plan score: budget fit, match to what you asked, travel efficiency and opening hours.")
     for a in cond.get("alerts", []):
         st.warning(a, icon=I["warn"])
@@ -1434,9 +1439,48 @@ def trip_panel(st_: dict):
     trip_details(st_, req, b, stops, day_txt)
 
 
+def checklist_tab():
+    """What to book or check before the trip, with 'do it by' dates, links, ticks and email reminders."""
+    from azmulti import checklist as CL
+    items, reminders = ss.planner.checklist()
+    if not items:
+        st.caption("Nothing to book ahead for this trip.")
+        return
+    left = sum(1 for i in items if not i["done"])
+    st.caption(f"{left} of {len(items)} still to do. Built from your plan: places that take or recommend reservations, "
+               "paid attractions, hours to double-check and the weather. Ticks are saved with your trip.")
+    today = CL.today_in_arizona()
+    for it in sorted(items, key=lambda i: (i["done"], i.get("due") or "9999")):
+        with card():
+            c = st.columns([0.5, 6, 1.6], vertical_alignment="center")
+            key = f"chk-{it['id']}"
+            c[0].checkbox(it["text"], value=it["done"], key=key, label_visibility="collapsed", disabled=bool(it.get("auto_done")),
+                          on_change=lambda i=it["id"], k=key: ss.planner.set_check(i, bool(ss.get(k))))
+            due = CL.fmt_due(it.get("due"), today)
+            style = "~~" if it["done"] else "**"
+            c[1].markdown(md(f"{style}{it['text']}{style}" + (f"  :orange-badge[{due}]" if due and not it["done"] else "")
+                             + ("  :green-badge[Booked]" if it.get("auto_done") else "")))
+            c[1].caption(md(it["why"]))
+            if it.get("link"):
+                c[2].link_button(it.get("link_label") or "Open", it["link"], use_container_width=True)
+    c1, c2 = st.columns([1.2, 1.6], vertical_alignment="center")
+    if c1.button("Email me this checklist", icon=":material/mail:", use_container_width=True, disabled=not left):
+        with st.spinner("Sending..."):
+            ok, msg = ss.planner.email_checklist()
+        (st.success if ok else st.error)("Checklist emailed." if ok and "outbox" not in msg else
+                                         "Email isn't set up on this copy of the app, so nothing was sent." if ok else msg)
+    on = c2.toggle("Email me reminders before the trip", value=reminders, key=f"rem-{ss.planner.trip_id}",
+                   help="One email on the days items are due (8 am Arizona time), only for things not ticked off yet.")
+    if on != reminders:
+        ss.planner.set_reminders(on)
+        st.toast("Reminders on - we'll email you as things come due." if on else "Reminders off.", icon=I["check"])
+
+
 def trip_details(st_: dict, req: dict, b: dict, stops: list, day_txt: str):
     """Budget, bookings, events and how the agents planned it, then calendar / save / route buttons."""
-    t_budget, t_book, t_events, t_how = st.tabs(["Budget", "Bookings", "Events", "How it was planned"])
+    t_check, t_budget, t_book, t_events, t_how = st.tabs(["Checklist", "Budget", "Bookings", "Events", "How it was planned"])
+    with t_check:
+        checklist_tab()
     with t_budget:
         if b:
             st.markdown(f"**${b['total_pp']:.0f} per person** · group of {b.get('party_size', 2)}: **${b['group_total']:.0f}** · "
