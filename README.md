@@ -109,11 +109,12 @@ Four pages along the top, laid out like a trip planner (warm light theme by defa
 
 The header shows which AI is planning (**AI Built In Planner**, or GPT-4o with a key) and the buttons **Dark mode /
 Light mode**, **OpenAI key** (use your own key for this session), **Preferences** (what Saguaro remembers, favorites,
-live-data status, about), **New trip** and **Sign in**.
+live-data status, about), **New trip** and the account menu.
 
 ### Accounts and trip confirmations
 
-Planning works without an account. **Sign in → Create account** asks for an email, a password and (optionally) a first
+Saguaro needs an account: signed out, every address shows a **sign-in page** (a short intro and the forms; the
+Plan / Map / My trips / Group pages appear once you're signed in). **Create account** asks for an email, a password and (optionally) a first
 name, then emails a **6-digit code**; the account is created once the code is entered, so nobody can sign up with
 someone else's address. **Keep me signed in** remembers the browser for 30 days, and **Forgot your password?** emails a
 code to set a new one. Once signed in, the name in the header opens **Sign out**, **Change password** and **Delete my

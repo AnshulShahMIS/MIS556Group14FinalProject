@@ -477,7 +477,7 @@ def stars(p: dict) -> str:
 
 def goto(where: str | None):
     """Switch pages outside any form/column context."""
-    if where:
+    if where and ss.planner.account:
         st.switch_page({"itinerary": plan_page, "chat": plan_page, "plan": plan_page, "map": map_page,
                         "trips": trips_page, "group": group_page}[where])
 
@@ -588,7 +588,7 @@ def sign_out(delete: bool = False):
     ss.chat, ss.votes, ss.changes, ss.changed_ids, ss.unseen, ss.updated_at = [], {}, [], set(), 0, None
     ss.pop("day_pick", None)
     st.toast("Your account and everything saved in it were deleted." if delete else "Signed out.", icon=I["check"])
-    ss["_goto"] = "plan"
+    st.rerun()  # back to the sign-in page
 
 
 def _outbox_note(msg: str):
@@ -596,10 +596,9 @@ def _outbox_note(msg: str):
         st.caption("Once the app's email is set up, codes and trip confirmations are emailed instead.")
 
 
-@st.dialog("Your Saguaro account")
-def account_dialog():
-    st.caption("An account keeps your preferences, favorites and trips, so they're there next time, on any device, and "
-               "lets you get trip confirmations by email. Planning works without one too.")
+@st.fragment
+def account_forms():
+    """Sign in / Create account (with the emailed code) / Forgot password, on the sign-in page."""
     t_in, t_new = st.tabs(["Sign in", "Create account"])
     with t_in:
         with st.form("sign_in", border=False):
@@ -690,6 +689,28 @@ def account_dialog():
             if c2.button("Change details", use_container_width=True):
                 ss.pop("_signup", None)
                 st.rerun(scope="fragment")
+
+
+def page_login():
+    """Saguaro needs an account: everyone who isn't signed in sees only this page."""
+    st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
+    left, right = st.columns([1.15, 1], gap="large")
+    with left:
+        st.title("Plan your Arizona trip with a team of AI agents", anchor=False)
+        st.markdown("Tell Saguaro where, when and who's coming. Its agents plan every day for you, then you change "
+                    "anything just by asking.")
+        for icon, text in [(":material/event_note:", "Day-by-day plans with places, food, hotels, drive times and costs"),
+                           (":material/forum:", "Change anything by chat: *make it cheaper*, *swap dinner*, *add a hike*"),
+                           (":material/reviews:", f"Real reviews from {len(get_catalog().df):,} Arizona places"),
+                           (":material/mail:", "Confirm your trip and get the itinerary by email"),
+                           (":material/group:", "Plan together: share a trip with a code and vote on stops")]:
+            st.markdown(f"{icon} {text}")
+        st.caption("Your account keeps your preferences, favorites and trips, on any device. Passwords are never "
+                   "stored, only a scrambled (hashed) version, and your email is used only for codes and trip "
+                   "confirmations.")
+    with right, card():
+        st.subheader("Sign in to start planning", anchor=False)
+        account_forms()
 
 
 @st.dialog("Confirm your trip")
@@ -822,6 +843,8 @@ def top_bar():
     """The AI status and the account buttons, shown on the right of the header bar (next to Plan / Map / My trips /
     Group); on narrow screens they drop to their own row under the header (see the .st-key-topbar style)."""
     has_plan = bool(plan_state())
+    acc = ss.planner.account
+    key_clicked = prefs_clicked = new_clicked = False
     with st.container(horizontal=True, horizontal_alignment="right", vertical_alignment="center", gap="small",
                       wrap=True, key="topbar"):
         bits = ["AI " + ("GPT-4o With Your Key" if ss.planner.has_api_key
@@ -829,20 +852,20 @@ def top_bar():
                          else "Built In Planner")]
         if ss.planner.shared_code:
             bits.append(f"shared trip {ss.planner.shared_code}")
-        st.caption(" · ".join(bits), width="content")
+        if acc:
+            st.caption(" · ".join(bits), width="content")
         # one switch: it reads "Dark mode" in light mode and "Light mode" in dark mode (swapped by the az-dark style,
         # so it is right even when the theme was changed from Streamlit's own menu)
         if st.button("Dark mode", icon=":material/dark_mode:", type="tertiary", key="theme_btn",
                      help="Switch between the light and dark look"):
             import secrets
             ss["_theme_switch"] = secrets.token_hex(6)  # one id per click (see below)
-        key_clicked = st.button("OpenAI key", icon=I["key"], type="tertiary")
-        prefs_clicked = st.button("Preferences", icon=I["prefs"], type="tertiary")
-        new_clicked = st.button("New trip", icon=I["new"], type="tertiary",
-                                help="Start a new trip - the current one is kept under My trips")
-        signin_clicked = False
-        acc = ss.planner.account
-        if acc:  # signed in: an account menu under the username
+        if acc:  # everything else only once signed in
+            key_clicked = st.button("OpenAI key", icon=I["key"], type="tertiary")
+            prefs_clicked = st.button("Preferences", icon=I["prefs"], type="tertiary")
+            new_clicked = st.button("New trip", icon=I["new"], type="tertiary",
+                                    help="Start a new trip - the current one is kept under My trips")
+            # an account menu under the name
             with st.popover(acc["username"], icon=I["user"], type="tertiary"):
                 st.caption(md(f"Signed in as **{acc.get('email') or acc['username']}**. Your preferences, favorites "
                               "and trips are saved to your account."))
@@ -865,9 +888,6 @@ def top_bar():
                     if st.button("Delete my account", icon=I["remove"], type="primary", disabled=not sure,
                                  use_container_width=True):
                         sign_out(delete=True)
-        else:
-            signin_clicked = st.button("Sign in", icon=I["user"], type="tertiary",
-                                       help="Keep your preferences and trips for next time")
     if ss.get("_theme_switch"):  # flip the theme once per click. Streamlit may draw this frame again later (another
         # page, a reconnect), so the click's id is remembered in the tab and a repeat does nothing
         nid = ss["_theme_switch"]
@@ -878,8 +898,6 @@ def top_bar():
         key_dialog()
     elif prefs_clicked:
         prefs_dialog()
-    elif signin_clicked:
-        account_dialog()
     if new_clicked:
         start_new_trip()
 
@@ -1760,7 +1778,17 @@ map_page = st.Page(safe(page_map), title="Map", icon=I["map"], url_path="map")
 trips_page = st.Page(safe(page_trips), title="My trips", icon=I["trips"], url_path="trips")
 group_page = st.Page(safe(page_group), title="Group", icon=I["group"], url_path="group")
 st.logo(str(Path(__file__).parent / "assets" / "wordmark.png"), size="large")
-nav = st.navigation([plan_page, map_page, trips_page, group_page], position="top")
+if ss.planner.account:
+    nav = st.navigation([plan_page, map_page, trips_page, group_page], position="top")
+else:  # an account is required: every address shows the sign-in page
+    def _login_at(path: str):  # the app's other addresses (/map, /trips, /group) show the sign-in page too
+        def page():
+            page_login()
+        page.__name__ = f"login_{path}"
+        return st.Page(safe(page), title="Sign in", icon=I["user"], url_path=path)
+
+    nav = st.navigation([st.Page(safe(page_login), title="Sign in", icon=I["user"], default=True)]
+                        + [_login_at(x) for x in ("map", "trips", "group")], position="hidden")
 
 top_bar()
 session_bridge()
