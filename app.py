@@ -60,7 +60,8 @@ h1 { letter-spacing: -0.01em; }
 .az-pop-text { padding: 12px 16px 14px; display: flex; flex-direction: column; gap: 2px; }
 .az-pop-text b { font-size: 1rem; font-weight: 600; }
 .az-pop-text span { font-size: 0.9rem; color: #6E6259; }
-[class*="st-key-popbtn-"] { position: absolute !important; inset: 0; z-index: 2; margin: 0 !important; }
+[class*="st-key-popbtn-"] { position: absolute !important; inset: 0; z-index: 2; margin: 0 !important;
+  width: 100%% !important; height: 100%% !important; max-width: none !important; }
 [class*="st-key-popbtn-"] button { position: absolute; inset: 0; width: 100%%; height: 100%%; opacity: 0; cursor: pointer; }
 .az-dark [class*="st-key-popcard-"] { background: #221D1A; border-color: #3A322D; }
 .az-dark .az-pop-art { background: var(--d); }
