@@ -102,15 +102,21 @@ h1 { letter-spacing: -0.01em; }
 [data-testid="stChatMessage"] h1, [data-testid="stChatMessage"] h2, [data-testid="stChatMessage"] h3 { font-size: 1.2rem; }
 [data-testid="stChatMessage"] h4, [data-testid="stChatMessage"] h5 { font-size: 1.02rem; }
 /* the AI status and account buttons sit in the header bar, on the right (left of Streamlit's status text and menu) */
+/* header buttons: labels never break; on narrower screens the row wraps, centred, under the header */
+.st-key-topbar button, .st-key-topbar button p, .st-key-topbar [data-testid="stCaptionContainer"] { white-space: nowrap; }
+@media (max-width: 1179px) {
+  .st-key-topbar { justify-content: center; row-gap: 0.1rem; column-gap: 0.25rem; }
+  .st-key-topbar [data-testid="stCaptionContainer"] { width: 100%%; text-align: center; }
+}
 @media (min-width: 1180px) {
-  .st-key-topbar { position: fixed; top: 0.2rem; right: 9.5rem; height: 3.75rem; width: auto !important; z-index: 1000001;
+  .st-key-topbar { flex-wrap: nowrap !important; position: fixed; top: 0.2rem; right: 9.5rem; height: 3.75rem; width: auto !important; z-index: 1000001;
     align-items: center; }
   .st-key-topbar > div, .st-key-topbar [data-testid="stElementContainer"] { margin: 0 !important; }
   .st-key-topbar [data-testid="stCaptionContainer"] { margin: 0 0.4rem 0 0; white-space: nowrap; }
   .st-key-topbar [data-testid="stCaptionContainer"] p { margin: 0; }
 }
 .az-dark .st-key-theme_btn button p { font-size: 0; }
-.az-dark .st-key-theme_btn button p::after { content: "Light mode"; font-size: 0.875rem; }
+.az-dark .st-key-theme_btn button p::after { content: "Light mode"; font-size: 0.875rem; white-space: nowrap; }
 .az-dark .st-key-theme_btn [data-testid="stIconMaterial"] { font-size: 0; }
 .az-dark .st-key-theme_btn [data-testid="stIconMaterial"]::after { content: "light_mode"; font-size: 1.25rem; }
 /* dark mode: the same layout on warm charcoal */
@@ -657,7 +663,7 @@ def top_bar():
     Group); on narrow screens they drop to their own row under the header (see the .st-key-topbar style)."""
     has_plan = bool(plan_state())
     with st.container(horizontal=True, horizontal_alignment="right", vertical_alignment="center", gap="small",
-                      wrap=False, key="topbar"):
+                      wrap=True, key="topbar"):
         bits = ["AI " + ("GPT-4o With Your Key" if ss.planner.has_api_key
                          else "GPT-4o (App Key)" if os.getenv("OPENAI_API_KEY") and not REQUIRE_USER_KEY and os.getenv("AZ_OFFLINE", "0") != "1"
                          else "Built In Planner")]
