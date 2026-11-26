@@ -56,7 +56,7 @@ h1 { letter-spacing: -0.01em; }
 [class*="st-key-popcard-"]:hover { box-shadow: 0 6px 18px rgba(42, 36, 32, 0.10); transform: translateY(-2px); }
 [class*="st-key-popcard-"]:has(button:focus-visible) { outline: 2px solid #B4532A; outline-offset: 2px; }
 .az-pop-art { height: 120px; display: flex; align-items: center; justify-content: center; background: var(--l); }
-.az-pop-art svg { stroke: var(--fl); }
+.az-pop-art .az-dark-only { display: none; }
 .az-pop-text { padding: 12px 16px 14px; display: flex; flex-direction: column; gap: 2px; }
 .az-pop-text b { font-size: 1rem; font-weight: 600; }
 .az-pop-text span { font-size: 0.9rem; color: #6E6259; }
@@ -64,7 +64,8 @@ h1 { letter-spacing: -0.01em; }
 [class*="st-key-popbtn-"] button { width: 100%%; height: 100%%; opacity: 0; cursor: pointer; }
 .az-dark [class*="st-key-popcard-"] { background: #221D1A; border-color: #3A322D; }
 .az-dark .az-pop-art { background: var(--d); }
-.az-dark .az-pop-art svg { stroke: var(--fd); }
+.az-dark .az-pop-art .az-light { display: none; }
+.az-dark .az-pop-art .az-dark-only { display: block; }
 .az-dark .az-pop-text span { color: #B9ADA2; }
 /* My trips: cards with a coloured tile on top; the current trip has an accent border */
 [class*="st-key-tripcard-"] { gap: 0.6rem; background: #FFFFFF; border: 1px solid #EADFD3; border-radius: 16px;
@@ -804,6 +805,14 @@ POPULAR = [
 ]
 
 
+def icon_uri(paths: str, color: str) -> str:
+    """A line icon as an image (st.html removes inline <svg>, but keeps images)."""
+    import base64
+    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="{color}" '
+           f'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">{paths}</svg>')
+    return "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode()
+
+
 def start_view():
     if ss.chat:  # a conversation is under way (guided questions or a question): show it front and centre
         _, mid, _ = st.columns([1, 3, 1])
@@ -866,9 +875,9 @@ def start_view():
         for col, (label, city_name, blurb, icon, bg, fg, bg_d, fg_d) in zip(cols, POPULAR):
             slug = label.replace(" ", "")
             with col, st.container(key=f"popcard-{slug}"):  # picture tile + name; the whole card is one button
-                st.html(f'<div class="az-pop" style="--l:{bg};--fl:{fg};--d:{bg_d};--fd:{fg_d}">'
-                        f'<div class="az-pop-art"><svg width="46" height="46" viewBox="0 0 24 24" fill="none" '
-                        f'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{icon}</svg></div>'
+                st.html(f'<div class="az-pop" style="--l:{bg};--d:{bg_d}"><div class="az-pop-art">'
+                        f'<img class="az-light" src="{icon_uri(icon, fg)}" width="46" height="46" alt="">'
+                        f'<img class="az-dark-only" src="{icon_uri(icon, fg_d)}" width="46" height="46" alt=""></div>'
                         f'<div class="az-pop-text"><b>{label}</b><span>{blurb}</span></div></div>')
                 # fills in Where on the form above (set before the form is drawn, so it sticks)
                 st.button(f"Plan a trip to {label}", key=f"popbtn-{slug}", on_click=ss.__setitem__, args=("qp_city", [city_name]))
