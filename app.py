@@ -50,6 +50,42 @@ st.html("""<style>
 [class*="st-key-card"] { box-shadow: 0 1px 2px rgba(42, 36, 32, 0.04); }
 [data-testid="stHeader"] { background: #FFFFFF; border-bottom: 1px solid #EADFD3; }
 h1 { letter-spacing: -0.01em; }
+/* Popular places: a coloured picture tile over the name, the whole card clickable (an invisible button covers it) */
+[class*="st-key-popcard-"] { position: relative; gap: 0; background: #FFFFFF; border: 1px solid #EADFD3;
+  border-radius: 16px; overflow: hidden; transition: box-shadow 0.15s, transform 0.15s; }
+[class*="st-key-popcard-"]:hover { box-shadow: 0 6px 18px rgba(42, 36, 32, 0.10); transform: translateY(-2px); }
+[class*="st-key-popcard-"]:has(button:focus-visible) { outline: 2px solid #B4532A; outline-offset: 2px; }
+.az-pop-art { height: 120px; display: flex; align-items: center; justify-content: center; background: var(--l); }
+.az-pop-art svg { stroke: var(--fl); }
+.az-pop-text { padding: 12px 16px 14px; display: flex; flex-direction: column; gap: 2px; }
+.az-pop-text b { font-size: 1rem; font-weight: 600; }
+.az-pop-text span { font-size: 0.9rem; color: #6E6259; }
+[class*="st-key-popbtn-"] { position: absolute !important; inset: 0; z-index: 2; margin: 0 !important; }
+[class*="st-key-popbtn-"] button { width: 100%%; height: 100%%; opacity: 0; cursor: pointer; }
+.az-dark [class*="st-key-popcard-"] { background: #221D1A; border-color: #3A322D; }
+.az-dark .az-pop-art { background: var(--d); }
+.az-dark .az-pop-art svg { stroke: var(--fd); }
+.az-dark .az-pop-text span { color: #B9ADA2; }
+/* My trips: cards with a coloured tile on top; the current trip has an accent border */
+[class*="st-key-tripcard-"] { gap: 0.6rem; background: #FFFFFF; border: 1px solid #EADFD3; border-radius: 16px;
+  overflow: hidden; padding-bottom: 16px; }
+[class*="st-key-tripcard-"] > div:not(:first-child) { padding-left: 16px; padding-right: 16px; }
+[class*="st-key-tripcard-"][class*="-current"] { border: 2px solid #B4532A; }
+.az-trip-art { height: 110px; position: relative; background: var(--l); }
+.az-trip-badge { position: absolute; left: 12px; top: 12px; font-size: 0.78rem; font-weight: 500; padding: 4px 10px;
+  border-radius: 999px; background: #FFFFFF; color: #6B2F16; }
+.az-trip-text { padding: 12px 16px 4px; display: flex; flex-direction: column; gap: 4px; }
+.az-trip-text b { font-size: 1.1rem; font-weight: 600; }
+.az-trip-text span { font-size: 0.88rem; color: #6E6259; }
+.az-trip-text .az-trip-hl { color: inherit; }
+[class*="st-key-topen-"] button { border-color: #B4532A; color: #8A3E1F; font-weight: 600; }
+.az-dark [class*="st-key-tripcard-"] { background: #221D1A; border-color: #3A322D; }
+.az-dark [class*="st-key-tripcard-"][class*="-current"] { border-color: #E07A4B; }
+.az-dark .az-trip-art { background: var(--d); }
+.az-dark .az-trip-badge { background: #171412; color: #F0A27A; }
+.az-dark .az-trip-text span { color: #B9ADA2; }
+.az-dark .az-trip-text .az-trip-hl { color: inherit; }
+.az-dark [class*="st-key-topen-"] button { border-color: #E07A4B; color: #F0A27A; }
 /* the chat's quick suggestions look like small rounded chips */
 .st-key-followups button { border-radius: 999px; min-height: 2rem; padding: 0.15rem 0.8rem; }
 .st-key-followups button p { font-size: 0.85rem; }
@@ -638,12 +674,18 @@ def top_bar():
     elif prefs_clicked:
         prefs_dialog()
     if new_clicked:
-        ss.planner.reset()  # the current plan is saved to My trips first
-        ss.chat, ss.votes, ss.changes, ss.changed_ids, ss.unseen, ss.updated_at = [], {}, [], set(), 0, None
-        ss.pop("day_pick", None)
-        if has_plan:
-            st.toast("Your last trip is saved under My trips.", icon=I["check"])
-        ss["_goto"] = "plan"
+        start_new_trip()
+
+
+def start_new_trip():
+    """Clear the planner for a new trip (the current one is kept under My trips) and go to the start screen."""
+    had = bool(plan_state())
+    ss.planner.reset()  # the current plan is saved to My trips first
+    ss.chat, ss.votes, ss.changes, ss.changed_ids, ss.unseen, ss.updated_at = [], {}, [], set(), 0, None
+    ss.pop("day_pick", None)
+    if had:
+        st.toast("Your last trip is saved under My trips.", icon=I["check"])
+    ss["_goto"] = "plan"
 
 
 # ================================================================== chat (left side of the Plan page)
@@ -747,8 +789,19 @@ def chat_panel(st_):
 
 
 # ================================================================== start screen (no trip yet)
-POPULAR = [("Phoenix", "Phoenix", "Sunrise hikes, museums"), ("Sedona", "Sedona", "Red rocks, vortexes"),
-           ("Grand Canyon", "Grand Canyon Village", "Rim views, trails"), ("Tucson", "Tucson", "Saguaros, street tacos")]
+# Popular places: (label, city for the form, blurb, line icon, light tile / icon colour, dark tile / icon colour)
+POPULAR = [
+    ("Phoenix", "Phoenix", "Sunrise hikes, museums",
+     '<path d="M3 21h18"/><path d="M5 21V8l5-3v16"/><path d="M10 21V11h9v10"/>', "#F4D9C8", "#8A3E1F", "#3B2B22", "#E9A47E"),
+    ("Sedona", "Sedona", "Red rocks, vortexes",
+     '<path d="M3 20l6-11 4 6 3-4 5 9z"/>', "#F1C9A8", "#7A3A12", "#46301F", "#F0B07E"),
+    ("Grand Canyon", "Grand Canyon Village", "Rim views, trails",
+     '<path d="M2 18h20"/><path d="M4 18c2-6 5-9 8-9s6 3 8 9"/><path d="M9 18c1-3 2-4 3-4s2 1 3 4"/>',
+     "#D8E6D9", "#2F5D3A", "#233127", "#9CC9A3"),
+    ("Tucson", "Tucson", "Saguaros, street tacos",
+     '<path d="M12 21V4a2 2 0 0 1 4 0v8"/><path d="M12 13H9a2 2 0 0 1-2-2V8a2 2 0 0 1 4 0"/>'
+     '<path d="M16 9h1a2 2 0 0 1 2 2v1"/><path d="M8 21h8"/>', "#E7DEC6", "#5B4A1E", "#36311F", "#D8C98E"),
+]
 
 
 def start_view():
@@ -810,13 +863,15 @@ def start_view():
 
         st.subheader("Popular places to start", anchor=False)
         cols = st.columns(4)
-        for col, (label, city_name, blurb) in zip(cols, POPULAR):
-            with col, card():
-                st.markdown(f"**{label}**")
-                st.caption(blurb)
-                if st.button("Start here", key=f"pop-{label}", use_container_width=True):
-                    ss["qp_city"] = [city_name]
-                    st.rerun()
+        for col, (label, city_name, blurb, icon, bg, fg, bg_d, fg_d) in zip(cols, POPULAR):
+            slug = label.replace(" ", "")
+            with col, st.container(key=f"popcard-{slug}"):  # picture tile + name; the whole card is one button
+                st.html(f'<div class="az-pop" style="--l:{bg};--fl:{fg};--d:{bg_d};--fd:{fg_d}">'
+                        f'<div class="az-pop-art"><svg width="46" height="46" viewBox="0 0 24 24" fill="none" '
+                        f'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{icon}</svg></div>'
+                        f'<div class="az-pop-text"><b>{label}</b><span>{blurb}</span></div></div>')
+                # fills in Where on the form above (set before the form is drawn, so it sticks)
+                st.button(f"Plan a trip to {label}", key=f"popbtn-{slug}", on_click=ss.__setitem__, args=("qp_city", [city_name]))
         if ss.planner.trips:
             st.page_link(trips_page, label=f"Your saved trips ({len(ss.planner.trips)})", icon=I["trips"])
     chat_box(None, "Or just tell me: 3 days in Sedona for 2, hiking and Italian food...")
@@ -1390,44 +1445,59 @@ def safe(fn):
     return run_page
 
 
+TRIP_TILES = [("#F1C9A8", "#46301F"), ("#D8E6D9", "#233127"), ("#E7DEC6", "#36311F"), ("#F4D9C8", "#3B2B22")]
+
+
 def page_trips():
-    st.header("My trips")
     trips = ss.planner.trips
     remembered = ss.planner.profile.get("memory_on")
-    st.caption("Every trip you plan is kept here - starting a new trip never deletes the old one. "
-               + ("Saved to your remembered profile, so they're here next time too." if remembered else
-                  "They last while this browser tab is open. Turn on **Remember me** in Preferences & privacy to keep them "
-                  "for next time."))
+    h = st.columns([5, 1.3], vertical_alignment="bottom")
+    h[0].title("My trips", anchor=False)
+    h[0].caption("Starting a new trip never deletes an old one. "
+                 + ("Saved to your remembered profile, so they're here next time too." if remembered else
+                    "Turn on **Remember me** in Preferences to keep them for next time."))
+    if h[1].button("Plan a new trip", type="primary", use_container_width=True):
+        start_new_trip()
     if not trips:
         empty_state("No trips yet. Plan one on the Plan page and it shows up here.")
         return
-    for t in trips:
-        current = t["id"] == ss.planner.trip_id
-        with card():
-            c = st.columns([4, 1.2, 1.2], vertical_alignment="center")
-            c[0].markdown(md(f"**{t.get('city') or 'Trip'}** · {t.get('when') or ''}"
-                             + ("  :blue-badge[Current trip]" if current else "")))
-            bits = [f"{t.get('stops', 0)} stops", f"{t.get('party', 2)} {'people' if t.get('party', 2) > 1 else 'person'}"]
-            if t.get("days", 1) > 1:
-                bits.append(f"{t['days']} days")
-            if t.get("cost_pp"):
-                bits.append(f"about ${t['cost_pp']:.0f} per person")
-            c[0].caption(md(" · ".join(bits) + (" · " + ", ".join(t.get("highlights") or []) if t.get("highlights") else "")))
-            if current:
-                if c[1].button("View", key=f"tv-{t['id']}", icon=I["itinerary"], use_container_width=True):
-                    ss["_goto"] = "itinerary"
-            elif c[1].button("Open", key=f"to-{t['id']}", icon=I["itinerary"], type="primary", use_container_width=True,
-                             help="Make this the current trip (your current one stays saved here)"):
-                if ss.planner.open_trip(t["id"]):
-                    ss.chat = [{"role": "assistant", "content": f"Opened your **{t.get('city')}** trip ({t.get('when')}). "
-                                                                "Ask me to change anything."}]
-                    ss.votes, ss.changes, ss.changed_ids, ss.unseen, ss.updated_at = {}, [], set(), 0, time.time()
-                    ss["_goto"] = "itinerary"
-            with c[2].popover("Delete", icon=I["remove"], use_container_width=True):
-                st.caption("Delete this trip for good?")
-                if st.button("Yes, delete it", key=f"td-{t['id']}", type="primary"):
-                    ss.planner.delete_trip(t["id"])
-                    st.rerun()
+    for row in range(0, len(trips), 3):
+        cols = st.columns(3)
+        for k, (col, t) in enumerate(zip(cols, trips[row:row + 3])):
+            current = t["id"] == ss.planner.trip_id
+            light, dark = TRIP_TILES[(row + k) % len(TRIP_TILES)]
+            party = t.get("party", 2)
+            line1 = " · ".join(x for x in [t.get("when") or "", f"{t['days']} days" if t.get("days", 1) > 1 else "",
+                                           f"{party} {'people' if party > 1 else 'person'}"] if x)
+            line2 = " · ".join(x for x in [f"{t.get('stops', 0)} stops",
+                                           f"about ${t['cost_pp']:.0f} per person" if t.get("cost_pp") else ""] if x)
+            with col, st.container(key=f"tripcard-{t['id']}" + ("-current" if current else "")):
+                st.html(f'<div class="az-trip-art" style="--l:{light};--d:{dark}">'
+                        + ('<span class="az-trip-badge">Current trip</span>' if current else "") + "</div>"
+                        f'<div class="az-trip-text"><b>{esc(t.get("city") or "Trip")}</b><span>{esc(line1)}</span>'
+                        f'<span>{esc(line2)}</span>'
+                        + (f'<span class="az-trip-hl">{esc(snip(", ".join(t.get("highlights") or []), 70))}</span>'
+                           if t.get("highlights") else "") + "</div>")
+                b = st.columns([2.4, 1], vertical_alignment="center")
+                if current:
+                    if b[0].button("View", key=f"tv-{t['id']}", type="primary", use_container_width=True):
+                        ss["_goto"] = "plan"
+                    if b[1].button("Share", key=f"ts-{t['id']}", use_container_width=True):
+                        ss["_goto"] = "group"
+                else:
+                    if b[0].button("Open", key=f"topen-{t['id']}", use_container_width=True,
+                                   help="Make this the current trip (your current one stays saved here)"):
+                        if ss.planner.open_trip(t["id"]):
+                            ss.chat = [{"role": "assistant", "content": f"Opened your **{t.get('city')}** trip ({t.get('when')}). "
+                                                                        "Ask me to change anything."}]
+                            ss.votes, ss.changes, ss.changed_ids, ss.unseen, ss.updated_at = {}, [], set(), 0, time.time()
+                            ss.pop("day_pick", None)
+                            ss["_goto"] = "plan"
+                    with b[1].popover("Delete", use_container_width=True):
+                        st.caption("Delete this trip for good?")
+                        if st.button("Yes, delete it", key=f"td-{t['id']}", type="primary"):
+                            ss.planner.delete_trip(t["id"])
+                            st.rerun()
 
 
 # ================================================================== navigation (titles stay fixed)
