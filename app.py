@@ -158,9 +158,9 @@ def _theme_src() -> str:
         "var it=null;for(var i=0;i<20&&!it;i++){if(i%5===0)b.click();await s(120);"
         "it=D.querySelector('[data-testid=\"stMainMenuItem-theme-'+n+'\"]');}"
         "if(it){it.click();await s(150);}if(D.querySelector('[data-testid^=\"stMainMenuItem\"]'))b.click();};}"
-        "if(window.__azTheme!==3){window.__azTheme=3;var K='stActiveTheme-'+location.pathname+'-v2';"
+        "if(window.__azTheme!==4){window.__azTheme=4;var K='stActiveTheme-'+location.pathname+'-v2';"
         "var v=localStorage.getItem(K);var first=!v||v==='\"System\"';if(first)localStorage.setItem(K,JSON.stringify('Light'));"
-        "var embedded=window!==window.parent,started=false;"
+        "var embedded=window!==window.parent,started=false,last=0;"
         "setInterval(function(){var a=document.querySelector('.stApp');if(!a)return;"
         "var m=getComputedStyle(a).backgroundColor.match(/[0-9]+/g);if(!m)return;var dark=(+m[0])+(+m[1])+(+m[2])<300;"
         "document.documentElement.classList.toggle('az-dark',dark);"
@@ -169,11 +169,14 @@ def _theme_src() -> str:
         "if(o&&o!==document&&o.head){var st=o.getElementById('az-outer-bg');if(!st){st=o.createElement('style');"
         "st.id='az-outer-bg';o.head.appendChild(st);}var css='html,body{background:'+getComputedStyle(a).backgroundColor+'!important}';"
         "if(st.textContent!==css)st.textContent=css;}"
-        "if(started)return;var b=" + menu + ";"
-        "if(b){started=true;if(first&&dark)window.__azPick('Light');}"  # menu: Streamlit remembers the choice itself
-        "else if(embedded&&document.querySelector('[data-testid=\"stMain\"]')){started=true;"
-        "var want=localStorage.getItem('azTheme')||'Light';if((dark?'Dark':'Light')!==want)window.__azPick(want);}"
-        "},300);}")
+        "var b=" + menu + ";"
+        "if(b){if(!started){started=true;if(first&&dark)window.__azPick('Light');}}"  # menu: Streamlit remembers it
+        # embedded (no menu): keep the visitor's choice. Streamlit goes back to its default theme when another page
+        # opens, so the choice is put back straight away, every time
+        "else if(embedded&&document.querySelector('[data-testid=\"stMain\"]')){"
+        "var want=localStorage.getItem('azTheme')||'Light';"
+        "if((dark?'Dark':'Light')!==want&&Date.now()-last>700){last=Date.now();window.__azPick(want);}}"
+        "},100);}")
 
 
 THEME_SRC = _theme_src()
