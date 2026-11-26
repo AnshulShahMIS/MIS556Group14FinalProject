@@ -105,8 +105,8 @@ h1 { letter-spacing: -0.01em; }
 /* header buttons: labels never break; on narrower screens the row wraps, centred, under the header */
 .st-key-topbar button, .st-key-topbar button p, .st-key-topbar [data-testid="stCaptionContainer"] { white-space: nowrap; }
 @media (max-width: 1179px) {
-  .st-key-topbar { justify-content: center; row-gap: 0.1rem; column-gap: 0.25rem; }
-  .st-key-topbar [data-testid="stCaptionContainer"] { width: 100%%; text-align: center; }
+  .st-key-topbar { justify-content: center; row-gap: 0.1rem; column-gap: 0.7rem; }
+  .st-key-topbar > div:has([data-testid="stCaptionContainer"]) { flex-basis: 100%%; text-align: center; }
 }
 @media (min-width: 1180px) {
   .st-key-topbar { flex-wrap: nowrap !important; position: fixed; top: 0.2rem; right: 9.5rem; height: 3.75rem; width: auto !important; z-index: 1000001;
