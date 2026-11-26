@@ -61,7 +61,7 @@ h1 { letter-spacing: -0.01em; }
 .az-pop-text b { font-size: 1rem; font-weight: 600; }
 .az-pop-text span { font-size: 0.9rem; color: #6E6259; }
 [class*="st-key-popbtn-"] { position: absolute !important; inset: 0; z-index: 2; margin: 0 !important; }
-[class*="st-key-popbtn-"] button { width: 100%%; height: 100%%; opacity: 0; cursor: pointer; }
+[class*="st-key-popbtn-"] button { position: absolute; inset: 0; width: 100%%; height: 100%%; opacity: 0; cursor: pointer; }
 .az-dark [class*="st-key-popcard-"] { background: #221D1A; border-color: #3A322D; }
 .az-dark .az-pop-art { background: var(--d); }
 .az-dark .az-pop-art .az-light { display: none; }
@@ -600,7 +600,7 @@ def prefs_dialog():
     st.markdown("**About**")
     st.caption("Saguaro is a team of AI agents (MIS 556, Group 14): Planner, Weather & Events, Attraction, Dining & Nightlife, "
                "Live Info, Route, Budget, a Critic that scores and fixes the plan, Booking, and a Concierge that writes it up. "
-               "Data: 20,626 Arizona places from Google Maps (2021) and TripAdvisor (2026). Your OpenAI key stays in this "
+               f"Data: {len(get_catalog().df):,} Arizona places from Google Maps (2021) and TripAdvisor (2026). Your OpenAI key stays in this "
                "session only; trip details are sent only to the live services above.")
 
 
@@ -895,8 +895,9 @@ def start_view():
                         f'<img class="az-light" src="{icon_uri(icon, fg)}" width="46" height="46" alt="">'
                         f'<img class="az-dark-only" src="{icon_uri(icon, fg_d)}" width="46" height="46" alt=""></div>'
                         f'<div class="az-pop-text"><b>{label}</b><span>{blurb}</span></div></div>')
-                # fills in Where on the form above (set before the form is drawn, so it sticks)
-                st.button(f"Plan a trip to {label}", key=f"popbtn-{slug}", on_click=ss.__setitem__, args=("qp_city", [city_name]))
+                # starts the tap-to-answer questions for this city (When? Who? ...), then plans it
+                st.button(f"Plan a trip to {label}", key=f"popbtn-{slug}", on_click=ss.__setitem__,
+                          args=("_ask_next", f"Help me plan a trip to {label}"))
         if ss.planner.trips:
             st.page_link(trips_page, label=f"Your saved trips ({len(ss.planner.trips)})", icon=I["trips"])
     chat_box(None, "Or just tell me: 3 days in Sedona for 2, hiking and Italian food...")
@@ -1279,6 +1280,10 @@ def trip_details(st_: dict, req: dict, b: dict, stops: list, day_txt: str):
 
 
 def page_plan():
+    if ss.get("_ask_next"):  # a Popular places card: start the questions for that city
+        with st.spinner("Getting started..."):
+            ask(ss.pop("_ask_next"))
+        st.rerun()
     if ss.get("_plan_next"):  # a plan requested from the start form: build it, then show it
         with st.spinner("Your agents are planning your trip..."):
             ask(ss.pop("_plan_next"))

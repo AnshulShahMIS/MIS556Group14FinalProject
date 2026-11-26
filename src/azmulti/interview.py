@@ -64,12 +64,22 @@ def starter(message: str) -> str | None:
     return None
 
 
-def start(scenario: str) -> tuple[dict, dict]:
+def start(scenario: str, message: str = "") -> tuple[dict, dict]:
+    """Start the questions. A city in the message ("help me plan a trip to Sedona", as sent by the Popular places
+    cards) is kept, so "Where?" isn't asked again."""
+    from .agents.planner import cities_in_order
     sc = SCENARIOS[scenario]
-    iv = {"active": True, "scenario": scenario, "step": 0, "answers": dict(sc["defaults"])}
+    iv = {"active": True, "scenario": scenario, "step": 0, "answers": dict(sc["defaults"]), "skip": []}
     if "who" in sc["defaults"]:
-        iv["skip"] = ["who"]
-    return iv, question(iv, intro=sc["intro"])
+        iv["skip"].append("who")
+    cities = [c for _, c in cities_in_order(message)] if message else []
+    intro = sc["intro"]
+    if cities:
+        iv["answers"]["where"] = " then ".join(cities)
+        iv["skip"].append("where")
+        if scenario == "custom":
+            intro = f"Let's plan your {' and '.join(c.replace(' Village', '') for c in cities)} trip - a few quick questions and I'll build your plan."
+    return iv, question(iv, intro=intro)
 
 
 def start_from_request(message: str) -> tuple[dict, dict] | None:
@@ -116,7 +126,9 @@ def question(iv: dict, intro: str | None = None, note: str | None = None) -> dic
     default = [o for o in (iv["answers"].get(key) or []) if o in (opts or [])] if multi else []
     msg = "\n\n".join(x for x in [intro, note, f"**{text}**" if key != "confirm" else text] if x)
     return {"key": key, "text": msg, "options": opts or [], "multi": multi, "default": default,
-            "step": iv["step"] + 1, "total": len([q for q in QUESTIONS if q[0] not in iv.get("skip", [])])}
+            # numbered among the questions actually asked (skipped ones don't count)
+            "step": len([q for q in QUESTIONS[:iv["step"] + 1] if q[0] not in iv.get("skip", [])]),
+            "total": len([q for q in QUESTIONS if q[0] not in iv.get("skip", [])])}
 
 
 def _pick(text: str, opts: list[str]) -> list[str]:

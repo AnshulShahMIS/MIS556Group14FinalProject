@@ -780,7 +780,7 @@ def _interview_turn(state: PlannerState, msg: str) -> tuple[dict | None, str]:
         return None, IV.compose(iv2)  # all answers in: plan with them
     scen = IV.starter(msg)
     if scen and not (has_plan and scen == "custom"):
-        iv, q = IV.start(scen)
+        iv, q = IV.start(scen, msg)
         return reply(q["text"], {**iv, "q": q}, f"started guided questions ({IV.SCENARIOS[scen]['title']})"), msg
     # a typed trip request with no city: ask the missing details (tap-to-answer) instead of guessing Phoenix
     cmd = route_command(msg, state) if not has_plan else None
