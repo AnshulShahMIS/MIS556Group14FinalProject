@@ -211,10 +211,16 @@ def _theme_src() -> str:
         "var it=null;for(var i=0;i<20&&!it;i++){if(i%5===0)b.click();await s(120);"
         "it=D.querySelector('[data-testid=\"stMainMenuItem-theme-'+n+'\"]');}"
         "if(it){it.click();await s(150);}if(D.querySelector('[data-testid^=\"stMainMenuItem\"]'))b.click();};}"
-        "if(window.__azTheme!==4){window.__azTheme=4;var K='stActiveTheme-'+location.pathname+'-v2';"
+        "if(window.__azTheme!==5){window.__azTheme=5;var K='stActiveTheme-'+location.pathname+'-v2';"
         "var v=localStorage.getItem(K);var first=!v||v==='\"System\"';if(first)localStorage.setItem(K,JSON.stringify('Light'));"
         "var embedded=window!==window.parent,started=false,last=0;"
-        "setInterval(function(){var a=document.querySelector('.stApp');if(!a)return;"
+        # the header buttons sit in the header bar (fixed); where the header scrolls away with the page (Streamlit
+        # Cloud's embedded app), they move up with it instead of floating over the page
+        "var syncBar=function(){var hd=document.querySelector('[data-testid=\"stHeader\"]'),tb=document.querySelector('.st-key-topbar');"
+        "if(!hd||!tb)return;var y=getComputedStyle(tb).position==='fixed'?Math.min(0,Math.round(hd.getBoundingClientRect().top)):0;"
+        "var tf=y?'translateY('+y+'px)':'';if(tb.style.transform!==tf)tb.style.transform=tf;};"
+        "document.addEventListener('scroll',syncBar,true);window.addEventListener('resize',syncBar);"
+        "setInterval(function(){syncBar();var a=document.querySelector('.stApp');if(!a)return;"
         "var m=getComputedStyle(a).backgroundColor.match(/[0-9]+/g);if(!m)return;var dark=(+m[0])+(+m[1])+(+m[2])<300;"
         "document.documentElement.classList.toggle('az-dark',dark);"
         # Streamlit Cloud's page around the embedded app: same background, so no white edges in either theme
