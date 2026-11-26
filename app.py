@@ -180,14 +180,20 @@ def _theme_src() -> str:
     import tomllib
 
     cfg = tomllib.loads((Path(__file__).parent / ".streamlit" / "config.toml").read_text(encoding="utf-8"))["theme"]
+    def font_url(setting: str) -> str:  # "Inter:https://...&display=swap, sans-serif" -> the https://... part
+        return setting.split(":", 1)[1].split(",")[0].strip()
+
     common = {"bodyFont": "Inter, sans-serif", "headingFont": "Fraunces, serif", "baseRadius": cfg.get("baseRadius", "0.75rem"),
-              "showWidgetBorder": True}
+              "showWidgetBorder": True,
+              # the font files too: without them the fonts are dropped when Streamlit switches themes on a new page
+              "fontSources": [{"configName": "font", "sourceUrl": font_url(cfg["font"])},
+                              {"configName": "headingFont", "sourceUrl": font_url(cfg["headingFont"])}]}
     keys = ("primaryColor", "backgroundColor", "secondaryBackgroundColor", "textColor", "borderColor", "linkColor")
     themes = {"Light": {"base": 0, **{k: cfg["light"][k] for k in keys}, **common},
               "Dark": {"base": 1, **{k: cfg["dark"][k] for k in keys}, **common}}
     menu = "document.querySelector('[data-testid=\"stMainMenu\"] button, button[aria-label=\"Main menu\"]')"
     return (
-        "if(window.__azPickV!==2){window.__azPickV=2;var TH=" + json.dumps(themes) + ";"
+        "if(window.__azPickV!==3){window.__azPickV=3;var TH=" + json.dumps(themes) + ";"
         "window.__azPick=async function(n){var D=document,s=function(m){return new Promise(function(r){setTimeout(r,m)})};"
         "var b=" + menu + ";"
         "if(!b){try{localStorage.setItem('azTheme',n);}catch(e){}"
