@@ -21,6 +21,7 @@ data/processed/tfidf.pkl
 
 # Written while the app runs (per-user / per-server, never shared through git)
 data/profiles/
+data/accounts/
 data/cache/
 data/shared/
 data/closed_reports.json

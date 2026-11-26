@@ -767,7 +767,7 @@ def h_favorite(state, cmd):
             favs.append({"id": p["id"], "name": p["name"], "city": p["city"], "url": p.get("url")})
             added.append(p["name"])
     prof["favorites"] = favs
-    note = "" if prof.get("memory_on") else " (kept for this session - turn on memory in the sidebar to keep it next time)"
+    note = "" if prof.get("memory_on") else " (kept for this visit - sign in to keep favorites for next time)"
     return {"profile": prof, "answer": f"Saved {', '.join(added) or 'it'} to your favorites{note}.", "_did": f"saved {len(added)}"}
 
 
@@ -847,14 +847,14 @@ def h_memory(state, cmd):
     a = cmd["action"]
     if a == "forget":
         return {"profile": {"memory_on": False, "_forget": True},
-                "answer": "Done - I deleted your saved preferences, favorites and history, and turned memory off.", "_did": "forgot profile"}
+                "answer": "Done - I deleted your saved preferences, favorites, history and saved trips.", "_did": "forgot profile"}
     if a == "off":
         prof["memory_on"] = False
         return {"profile": prof, "answer": "Memory is off. I won't save anything new about you (say *forget me* to also delete what's saved).", "_did": "memory off"}
     if a == "on":
         prof["memory_on"] = True
         return {"profile": prof, "answer": "Memory is on. I'll remember your cuisines, interests, diet, accessibility needs, favorites and places you've been shown "
-                                           "(stored only on this computer). Say *forget me* any time.", "_did": "memory on"}
+                                           "(saved to your account when you're signed in; otherwise just for this visit). Say *forget me* any time.", "_did": "memory on"}
     if a == "learn":
         t = state["user_message"].lower()
         prof["memory_on"] = True
@@ -882,7 +882,8 @@ def h_memory(state, cmd):
                 "_did": f"learned {learned}"}
     # show
     if not prof.get("memory_on") and not prof.get("favorites"):
-        return {"answer": "Memory is **off**, so I'm not keeping anything about you between visits. Turn it on in the sidebar or say *turn on memory*.", "_did": "show (empty)"}
+        return {"answer": "I'm not keeping anything about you between visits yet. **Sign in** (top right) and I'll remember your "
+                          "preferences, favorites and trips on any device.", "_did": "show (empty)"}
     parts = [f"Memory is **{'on' if prof.get('memory_on') else 'off'}**."]
     if prof.get("cuisines"):
         parts.append("Cuisines: " + ", ".join(sorted(prof["cuisines"], key=prof["cuisines"].get, reverse=True)[:5]))

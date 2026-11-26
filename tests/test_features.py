@@ -11,7 +11,6 @@ import pytest  # noqa: E402
 from azmulti import weather as W  # noqa: E402
 from azmulti.agents.planner import parse_request_rules  # noqa: E402
 from azmulti.graph import Planner  # noqa: E402
-from azmulti.profiles import _path  # noqa: E402
 
 BRIEF = ("Plan a Saturday in Scottsdale for four friends. We're all 24, have a $125 budget per person, want a fun "
          "outdoor activity, Mexican food for dinner, and somewhere to go out afterward.")
@@ -160,28 +159,7 @@ def test_weather_question():
 
 
 # 8. Personalization & memory --------------------------------------------------------------------
-def test_memory_is_opt_in_and_forgettable(tmp_path, monkeypatch):
-    import azmulti.profiles as P
-    monkeypatch.setattr(P, "PROFILE_DIR", tmp_path)
-    p = Planner(profile_name="pytest-user", pin="4321")
-    p.ask("remember I'm vegetarian")
-    assert p.profile["memory_on"] and "vegetarian" in p.profile["dietary"]
-    files = list(tmp_path.glob("*.json"))
-    assert len(files) == 1 and "pytest" not in files[0].name  # name not visible on disk
-    assert not Planner(profile_name="pytest-user", pin="0000").profile.get("dietary")  # wrong PIN sees nothing
-    out = p.ask("Saturday in Tempe for 2, lunch and a museum")
-    assert "vegetarian" in out["request"]["dietary"]
-    p.ask("forget me")
-    assert not list(tmp_path.glob("*.json")) and not p.profile.get("memory_on")
-
-
-def test_memory_off_writes_nothing(tmp_path, monkeypatch):
-    import azmulti.profiles as P
-    monkeypatch.setattr(P, "PROFILE_DIR", tmp_path)
-    p = Planner(profile_name="nobody")
-    p.ask(BRIEF)
-    p.ask("save stop 1")
-    assert not list(tmp_path.iterdir())
+# (accounts and saved memory: see test_accounts.py)
 
 
 def test_feedback_learns_and_replaces(planned):

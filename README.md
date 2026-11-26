@@ -104,12 +104,26 @@ Four pages along the top, laid out like a trip planner (warm light theme by defa
 |---|---|
 | **Plan** (home) | Before a trip exists: a *Where in Arizona?* start screen with a quick form (one or more cities, dates on a calendar, adults, kids, budget, and *More options* for interests, dinner, getting around and extras), idea buttons (**Friends' day out, Family day, Date night, Game day**) that start a short tap-to-answer interview, *Popular places to start*, and a chat box for typing the trip or asking questions. Once there's a trip: **chat on the left** (changes like "make it cheaper", questions like "reviews of Phoenix Zoo", quick follow-up buttons) and **your trip on the right**: a trip card (cities, dates, travelers, budget bar, weather, hotels, plan score, Share), day tabs (with the city for multi-city trips), a map of that day, and a card per stop with **Reserve / Tickets** (the form opens right under the stop) and a **⋯** menu (details and reviews, swap, cheaper option, directions, remove, closed for good). Underneath: **Budget, Bookings, Events, How it was planned**, then calendar / save-as-page / Google Maps route. |
 | **Map** | Every stop on a large map, numbered in visiting order and colored by type (activity, food, night out, stay), with the route between them and website, menu and directions buttons for each stop. |
-| **My trips** | Every trip you've planned. **New trip** keeps the old one here; **Open** brings it back to edit, **Delete** removes it. Kept across visits when *Remember me* is on. |
+| **My trips** | Every trip you've planned. **New trip** keeps the old one here; **Open** brings it back to edit, **Delete** removes it. Kept across visits and devices when you're signed in. |
 | **Group** | Share the plan with a code, join a friend's plan, and vote on each stop together. |
 
 The header shows which AI is planning (**AI Built In Planner**, or GPT-4o with a key) and the buttons **Dark mode /
-Light mode**, **OpenAI key** (use your own key for this session), **Preferences** (remembered preferences with name +
-PIN, favorites, live-data status, about) and **New trip**.
+Light mode**, **OpenAI key** (use your own key for this session), **Preferences** (what Saguaro remembers, favorites,
+live-data status, about), **New trip** and **Sign in**.
+
+### Accounts
+
+Planning works without an account. **Sign in → Create account** (username + password, no email) keeps your
+preferences, favorites and trips, on any device; **Keep me signed in** remembers the browser for 30 days. Once signed
+in, the username in the header opens **Sign out**, **Change password** and **Delete my account**.
+
+- Passwords are never stored: only a salted PBKDF2-SHA256 hash (200,000 rounds). Wrong-password messages don't say
+  whether the username exists, and 5 misses lock a username for 5 minutes.
+- "Keep me signed in" puts a random token in a browser cookie; only its hash is stored, and signing out deletes it.
+- Accounts, preferences and trips are JSON files in a **private GitHub repository** (secrets `AZ_STORE_REPO` and
+  `AZ_STORE_TOKEN`, see DEPLOY.md), so they survive app updates; without those secrets they're local files under
+  `data/accounts/` (not committed). Code: `src/azmulti/accounts.py`, `store.py`, `profiles.py`; tests:
+  `tests/test_accounts.py`.
 
 The previous design is saved as the git tag `v1-classic-ui` (`git checkout v1-classic-ui -- app.py .streamlit/config.toml`
 brings it back).

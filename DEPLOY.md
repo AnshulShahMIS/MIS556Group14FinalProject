@@ -64,6 +64,24 @@ AZ_REQUIRE_USER_KEY = "1"
   `AZ_REQUIRE_USER_KEY = "1"` makes sure the server's key is never used for visitors.
 - Never commit keys to GitHub. The `.gitignore` already excludes `.env` and `.streamlit/secrets.toml`.
 
+### Accounts storage (so accounts survive app updates)
+
+Streamlit Cloud wipes the app's own files on every update, so accounts are kept in a separate **private** GitHub repo:
+
+1. On GitHub, create a new **private** repository, e.g. `saguaro-data` (leave it empty or add a README).
+2. GitHub → Settings → Developer settings → **Fine-grained personal access tokens** → *Generate new token*:
+   repository access **Only select repositories → saguaro-data**; permissions → Repository → **Contents: Read and
+   write** (nothing else). Pick an expiry that covers the semester.
+3. In the Streamlit app's **Settings → Secrets**, add:
+
+```toml
+AZ_STORE_REPO = "YourGitHubName/saguaro-data"
+AZ_STORE_TOKEN = "github_pat_..."
+```
+
+The token never appears in the code, logs or the app. Without these two secrets the app still works, but accounts are
+kept only until the next update.
+
 ## 3. Updating the app later
 
 Change the code, then:

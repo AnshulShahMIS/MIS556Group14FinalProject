@@ -241,21 +241,6 @@ def test_new_trip_keeps_old_trips():
     assert [t["city"] for t in p.trips] == ["Tucson"]
 
 
-def test_saved_trips_persist_only_with_memory_on(tmp_path, monkeypatch):
-    import azmulti.profiles as P
-    monkeypatch.setattr(P, "PROFILE_DIR", tmp_path)
-    p = Planner()
-    p.ask("Saturday in Sedona for 2, hiking")
-    assert not list(tmp_path.glob("*.trips.json"))  # memory off: nothing written
-    p.set_memory(True, "Jordan", "4321")
-    assert len(list(tmp_path.glob("*.trips.json"))) == 1
-    again = Planner("Jordan", "4321")
-    assert [t["city"] for t in again.trips] == ["Sedona"]
-    assert Planner("Jordan", "0000").trips == []  # wrong PIN: no trips
-    again.forget()
-    assert not list(tmp_path.glob("*.trips.json"))
-
-
 def test_multi_city_trip():
     from azmulti.agents.planner import parse_request_rules
     r = parse_request_rules("3 days in Phoenix, then 2 days in Sedona and a day at the Grand Canyon")

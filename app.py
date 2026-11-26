@@ -105,11 +105,11 @@ h1 { letter-spacing: -0.01em; }
 /* the AI status and account buttons sit in the header bar, on the right (left of Streamlit's status text and menu) */
 /* header buttons: labels never break; on narrower screens the row wraps, centred, under the header */
 .st-key-topbar button, .st-key-topbar button p, .st-key-topbar [data-testid="stCaptionContainer"] { white-space: nowrap; }
-@media (max-width: 1179px) {
+@media (max-width: 1299px) {
   .st-key-topbar { justify-content: center; row-gap: 0.1rem; column-gap: 0.7rem; }
   .st-key-topbar > div:has([data-testid="stCaptionContainer"]) { flex-basis: 100%%; text-align: center; }
 }
-@media (min-width: 1180px) {
+@media (min-width: 1300px) {
   .st-key-topbar { flex-wrap: nowrap !important; position: fixed; top: 0.2rem; right: 9.5rem; height: 3.75rem; width: auto !important; z-index: 1000001;
     align-items: center; }
   .st-key-topbar > div, .st-key-topbar [data-testid="stElementContainer"] { margin: 0 !important; }
@@ -286,7 +286,7 @@ _hide_badges_from_first_paint(f"{EMBED_REDIRECT_JS}{EARLY_JS}try{{{THEME_SRC}}}c
 import pandas as pd  # noqa: E402
 import pydeck as pdk  # noqa: E402
 
-from azmulti import live, llm, shared  # noqa: E402
+from azmulti import accounts, live, llm, shared  # noqa: E402
 from azmulti.agents.concierge import web_links  # noqa: E402
 from azmulti.catalog import get_catalog  # noqa: E402
 from azmulti.changes import diff_plans, record  # noqa: E402
@@ -347,6 +347,7 @@ def warm():
 
 
 _T0 = time.time()
+SESSION_COOKIE = "az_session"  # "keep me signed in" (see accounts.py)
 warm()
 ss = st.session_state
 if "planner" not in ss:
@@ -354,7 +355,16 @@ if "planner" not in ss:
     ss.chat, ss.votes = [], {}
     ss.changes, ss.changed_ids, ss.unseen, ss.updated_at = [], set(), 0, None
     ss.msg_limit, ss.join_limit = RateLimiter(20, 60), RateLimiter(5, 600)
-    ss.pin_limit, ss.key_limit = RateLimiter(5, 600), RateLimiter(5, 600)
+    ss.login_limit, ss.key_limit = RateLimiter(8, 600), RateLimiter(5, 600)
+    ss.session_token = None
+    try:  # "keep me signed in": this browser's sign-in cookie (only a hash of it is stored on our side)
+        _tok = st.context.cookies.get(SESSION_COOKIE)
+        _acc = accounts.resume_session(_tok)
+        if _acc:
+            ss.planner.sign_in(_acc)
+            ss.session_token = _tok
+    except Exception as _e:
+        logging.getLogger("app").warning("sign-in from cookie failed: %s", type(_e).__name__)
 
 
 # ================================================================== helpers
@@ -561,31 +571,84 @@ def key_dialog():
         st.rerun()
 
 
+def finish_sign_in(account: dict, keep: bool, msg: str):
+    """Signed in (or just created): use the account's preferences and trips, and remember this browser if asked."""
+    ss.planner.sign_in(account)
+    if keep:
+        ss.session_token = accounts.new_session(account)
+        ss["_cookie"] = ("set", ss.session_token)
+    st.toast(msg, icon=I["check"])
+    st.rerun()
+
+
+def sign_out(delete: bool = False):
+    if delete and ss.planner.account:
+        accounts.delete_account(ss.planner.account, ss.session_token)
+    else:
+        accounts.end_session(ss.session_token)
+    ss.session_token = None
+    ss["_cookie"] = ("clear", "")
+    ss.planner.sign_out()
+    ss.chat, ss.votes, ss.changes, ss.changed_ids, ss.unseen, ss.updated_at = [], {}, [], set(), 0, None
+    ss.pop("day_pick", None)
+    st.toast("Your account and everything saved in it were deleted." if delete else "Signed out.", icon=I["check"])
+    ss["_goto"] = "plan"
+
+
+@st.dialog("Your Saguaro account")
+def account_dialog():
+    st.caption("An account keeps your preferences, favorites and trips, so they're there next time, on any device. "
+               "Planning works without one too.")
+    t_in, t_new = st.tabs(["Sign in", "Create account"])
+    with t_in, st.form("sign_in", border=False):
+        user = st.text_input("Username", max_chars=30, autocomplete="username")
+        pw = st.text_input("Password", type="password", max_chars=128, autocomplete="current-password")
+        keep = st.checkbox("Keep me signed in on this device", value=True)
+        if st.form_submit_button("Sign in", type="primary", use_container_width=True):
+            if not ss.login_limit.allow():
+                st.error(f"Too many tries - wait {ss.login_limit.retry_in()} s.")
+            else:
+                ok, msg, acc = accounts.sign_in(user, pw)
+                if ok:
+                    finish_sign_in(acc, keep, msg)
+                st.error(msg)
+    with t_new, st.form("sign_up", border=False):
+        user = st.text_input("Choose a username", max_chars=30, autocomplete="username",
+                             help="3-30 letters, numbers, dots, dashes or underscores")
+        pw = st.text_input("Password", type="password", max_chars=128, autocomplete="new-password",
+                           help=f"At least {accounts.MIN_PASSWORD} characters")
+        pw2 = st.text_input("Type it again", type="password", max_chars=128, autocomplete="new-password")
+        keep = st.checkbox("Keep me signed in on this device", value=True, key="keep_new")
+        st.caption("Your password is never stored, only a scrambled (hashed) version of it. No email needed. "
+                   "There's no password reset, so keep it somewhere safe.")
+        if st.form_submit_button("Create account", type="primary", use_container_width=True):
+            if not ss.login_limit.allow():
+                st.error(f"Too many tries - wait {ss.login_limit.retry_in()} s.")
+            else:
+                ok, msg, acc = accounts.create_account(user, pw, pw2)
+                if ok:
+                    finish_sign_in(acc, keep, msg)
+                st.error(msg)
+
+
 @st.dialog("Preferences & privacy", width="large")
 def prefs_dialog():
-    st.markdown("**Remember my preferences**")
-    st.caption("Off by default. When on, your favorite cuisines and interests, diet, accessibility needs, favorites and places "
-               "you've seen are saved under a hash of your name + PIN. Never shared.")
-    prof = ss.planner.profile
-    c1, c2 = st.columns(2)
-    name = c1.text_input("Profile name", value=ss.planner.profile_name or "", max_chars=40)
-    pin = c2.text_input("PIN (4+ characters)", type="password", max_chars=32, autocomplete="off")
-    mem = st.toggle("Remember me", value=bool(prof.get("memory_on")), disabled=len(pin or "") < 4)
-    if len(pin or "") >= 4 and (mem != bool(prof.get("memory_on")) or (name and name != (ss.planner.profile_name or ""))
-                                or pin != ss.get("_pin_used")):
-        if ss.pin_limit.allow():
-            ss.planner.set_memory(mem, name or None, pin)
-            ss["_pin_used"] = pin
-            st.rerun()
-        else:
-            st.error(f"Too many attempts - try again in {ss.pin_limit.retry_in()} s.")
+    st.markdown("**Your account**")
+    acc = ss.planner.account
+    if acc:
+        st.caption(md(f"Signed in as **{acc['username']}**. Your preferences, favorites and trips are saved to your account. "
+                      "Use the account menu (top right) to sign out, change your password or delete your account."))
+    else:
+        st.caption("You're not signed in, so nothing is kept after you leave. Sign in (top right) to keep your preferences, "
+                   "favorites and trips for next time.")
     c1, c2 = st.columns(2)
     if c1.button("What do you remember?", use_container_width=True):
         ask("what do you remember about me?")
+        ss["_goto"] = "plan"
         st.rerun()
-    if c2.button("Forget me", icon=I["remove"], use_container_width=True):
+    if c2.button("Forget my preferences and trips", icon=I["remove"], use_container_width=True):
         ss.planner.forget()
-        st.toast("Deleted saved preferences and turned memory off.", icon=I["check"])
+        st.toast("Deleted what I'd learned about you and your saved trips.", icon=I["check"])
         st.rerun()
     favs = ss.planner.profile.get("favorites", [])
     if favs:
@@ -681,6 +744,40 @@ def top_bar():
         prefs_clicked = st.button("Preferences", icon=I["prefs"], type="tertiary")
         new_clicked = st.button("New trip", icon=I["new"], type="tertiary",
                                 help="Start a new trip - the current one is kept under My trips")
+        signin_clicked = False
+        acc = ss.planner.account
+        if acc:  # signed in: an account menu under the username
+            with st.popover(acc["username"], icon=I["user"], type="tertiary"):
+                st.caption(md(f"Signed in as **{acc['username']}**. Your preferences, favorites and trips are saved "
+                              "to your account."))
+                if st.button("Sign out", icon=":material/logout:", use_container_width=True):
+                    sign_out()
+                with st.expander("Change password"):
+                    with st.form("change_pw", border=False):
+                        old = st.text_input("Current password", type="password", autocomplete="current-password")
+                        new = st.text_input("New password", type="password", autocomplete="new-password")
+                        new2 = st.text_input("New password again", type="password", autocomplete="new-password")
+                        if st.form_submit_button("Change password", use_container_width=True):
+                            if not ss.login_limit.allow():
+                                st.error(f"Too many tries - wait {ss.login_limit.retry_in()} s.")
+                            else:
+                                ok, msg = accounts.change_password(acc, old, new, new2)
+                                (st.success if ok else st.error)(msg)
+                with st.expander("Delete my account"):
+                    st.caption("Deletes your account, preferences, favorites and saved trips for good. This can't be undone.")
+                    sure = st.checkbox("Yes, delete everything")
+                    if st.button("Delete my account", icon=I["remove"], type="primary", disabled=not sure,
+                                 use_container_width=True):
+                        sign_out(delete=True)
+        else:
+            signin_clicked = st.button("Sign in", icon=I["user"], type="tertiary",
+                                       help="Keep your preferences and trips for next time")
+    if ss.get("_cookie"):  # "keep me signed in": set (or clear) this browser's sign-in cookie
+        op, tok = ss.pop("_cookie")
+        js = (f"document.cookie='{SESSION_COOKIE}=' + {tok!r} + '; Max-Age={accounts.SESSION_DAYS * 86400}; Path=/; "
+              "SameSite=Lax'+(location.protocol==='https:'?'; Secure':'');" if op == "set" else
+              f"document.cookie='{SESSION_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax'+(location.protocol==='https:'?'; Secure':'');")
+        components.html("<script>%s</script>" % in_app_page(js), height=0)
     if ss.get("_theme_switch"):  # flip the theme once per click. Streamlit may draw this frame again later (another
         # page, a reconnect), so the click's id is remembered in the tab and a repeat does nothing
         nid = ss["_theme_switch"]
@@ -691,6 +788,8 @@ def top_bar():
         key_dialog()
     elif prefs_clicked:
         prefs_dialog()
+    elif signin_clicked:
+        account_dialog()
     if new_clicked:
         start_new_trip()
 
@@ -1481,12 +1580,12 @@ TRIP_TILES = [("#F1C9A8", "#46301F"), ("#D8E6D9", "#233127"), ("#E7DEC6", "#3631
 
 def page_trips():
     trips = ss.planner.trips
-    remembered = ss.planner.profile.get("memory_on")
+    remembered = bool(ss.planner.account)
     h = st.columns([5, 1.3], vertical_alignment="bottom")
     h[0].title("My trips", anchor=False)
     h[0].caption("Starting a new trip never deletes an old one. "
-                 + ("Saved to your remembered profile, so they're here next time too." if remembered else
-                    "Turn on **Remember me** in Preferences to keep them for next time."))
+                 + ("They're saved to your account, so they're here next time too." if remembered else
+                    "**Sign in** (top right) to keep them for next time."))
     if h[1].button("Plan a new trip", type="primary", use_container_width=True):
         start_new_trip()
     if not trips:

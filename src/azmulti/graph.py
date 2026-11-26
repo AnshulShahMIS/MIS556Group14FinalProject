@@ -29,7 +29,7 @@ from .agents.weather_agent import weather_node
 import contextvars
 
 from . import llm, shared
-from .profiles import load_profile, load_trips, save_profile, save_trips, update_from_turn
+from .profiles import load_profile, load_trip_plan, load_trips, save_profile, save_trips, update_from_turn
 from .security import clean_name, mask_key, redact, sanitize_markdown
 from .state import PlannerState
 
@@ -73,14 +73,21 @@ def build_graph(checkpointer=None):
 class Planner:
     """Convenience wrapper: one object per app session, one thread per conversation."""
 
-    def __init__(self, profile_name: str | None = None, pin: str | None = ""):
+    def __init__(self, account: dict | None = None):
         self.graph = build_graph()
         self.thread_id = str(uuid.uuid4())
-        self.profile_name = profile_name
-        self._pin = pin or ""
-        self.profile = load_profile(profile_name, self._pin)
-        self.trips: list[dict] = load_trips(profile_name, self._pin) if self.profile.get("memory_on") else []
+        self.account: dict | None = account  # {"id", "username"} when signed in (see accounts.py); None = guest
+        self.profile = load_profile(self._aid)
+        self.trips: list[dict] = load_trips(self._aid)
         self.trip_id: str | None = None  # which saved trip the current plan belongs to
+
+    @property
+    def _aid(self) -> str | None:
+        return (self.account or {}).get("id")
+
+    @property
+    def profile_name(self) -> str | None:
+        return (self.account or {}).get("username")
 
     @property
     def cfg(self) -> dict:
@@ -109,7 +116,6 @@ class Planner:
     def __getstate__(self):  # never pickle the key (e.g. if a host serializes session state)
         d = dict(self.__dict__)
         d.pop("_api_key", None)
-        d.pop("_pin", None)
         return d
 
     def ask(self, message: str) -> dict:
@@ -144,8 +150,8 @@ class Planner:
         self.profile = update_from_turn(out.get("profile") or self.profile, out)
         if self.profile.get("_forget"):  # "forget me": saved trips go too
             self.trips, self.trip_id = [], None
-            save_trips(self.profile_name, [], self.profile, self._pin)
-        save_profile(self.profile_name, self.profile, self._pin)
+            save_trips(self._aid, [])
+        save_profile(self._aid, self.profile)
         new_city = (out.get("request") or {}).get("city")
         if before_city and out.get("intent") == "new_plan" and new_city and new_city != before_city:
             if not self.trip_id:  # (a plan that is already in My trips was saved after its last change)
@@ -216,25 +222,47 @@ class Planner:
         bucket = self.profile.setdefault(key, {})
         for c in (place.get("categories") or "").split(", ")[:2]:
             bucket[c] = bucket.get(c, 0) + 1
-        save_profile(self.profile_name, self.profile, self._pin)
+        save_profile(self._aid, self.profile)
 
-    def set_memory(self, on: bool, name: str | None = None, pin: str | None = None) -> None:
-        if (name and name != self.profile_name) or (pin is not None and pin != self._pin):
-            self.profile_name = name or self.profile_name
-            self._pin = pin if pin is not None else self._pin
-            self.profile = load_profile(self.profile_name, self._pin)
-        self.profile["memory_on"] = on
-        save_profile(self.profile_name, self.profile, self._pin)
-        if on:  # bring back this traveler's saved trips and keep the ones planned in this visit
-            known = {t["id"] for t in self.trips}
-            self.trips = (self.trips + [t for t in load_trips(self.profile_name, self._pin) if t["id"] not in known])[:self.MAX_TRIPS]
-            save_trips(self.profile_name, self.trips, self.profile, self._pin)
+    # ---------------- accounts (accounts.py checks the password; this just switches whose data is used)
+    def sign_in(self, account: dict) -> None:
+        """Use this account's saved preferences and trips from now on. Trips planned before signing in, in
+        this visit, are added to the account; preferences learned this visit are merged in."""
+        self.account = {"id": account["id"], "username": account["username"]}
+        saved = load_profile(self._aid)
+        for k in ("cuisines", "interests", "liked_categories", "disliked_categories"):
+            for item, n in (self.profile.get(k) or {}).items():
+                saved.setdefault(k, {})[item] = saved.get(k, {}).get(item, 0) + n
+        if self.profile.get("dietary"):
+            saved["dietary"] = sorted(set(saved.get("dietary", [])) | set(self.profile["dietary"]))
+        if self.profile.get("wheelchair"):
+            saved["wheelchair"] = True
+        favs = {f["id"]: f for f in saved.get("favorites", []) + self.profile.get("favorites", [])}
+        if favs:
+            saved["favorites"] = list(favs.values())
+        saved["history"] = list(dict.fromkeys(saved.get("history", []) + self.profile.get("history", [])))[-300:]
+        saved.setdefault("memory_on", True)
+        self.profile = saved
+        save_profile(self._aid, self.profile)
+        known = {t["id"] for t in self.trips}
+        self.trips = (self.trips + [t for t in load_trips(self._aid) if t["id"] not in known])[:self.MAX_TRIPS]
+        save_trips(self._aid, self.trips)
+
+    def sign_out(self) -> None:
+        """Back to guest: nothing of the account stays in this session."""
+        self.account = None
+        self.profile = {"memory_on": False}
+        self.trips, self.trip_id = [], None
+        self.thread_id = str(uuid.uuid4())
+        self.shared_code, self.shared_version = None, 0
 
     def forget(self) -> None:
-        self.profile = {"memory_on": False, "_forget": True}
-        save_trips(self.profile_name, [], self.profile, self._pin)  # deletes the saved trips file too
-        save_profile(self.profile_name, self.profile, self._pin)
-        self.profile = {"memory_on": False}
+        """Delete what was learned about the traveler, and their saved trips (a signed-in account stays)."""
+        self.profile = {"memory_on": bool(self.account), "_forget": True}
+        self.trips, self.trip_id = [], None
+        save_trips(self._aid, [])
+        save_profile(self._aid, self.profile)
+        self.profile = {"memory_on": bool(self.account)}
 
     # ---------------- My trips: every plan is kept, "New trip" never throws one away
     TRIP_KEYS = ("request", "slots", "conditions", "budget", "quality", "route", "issues", "booking", "answer",
@@ -269,7 +297,7 @@ class Planner:
         self.trips = self.trips[:self.MAX_TRIPS]
         if state is None:
             self.trip_id = tid
-        save_trips(self.profile_name, self.trips, self.profile, self._pin)
+        save_trips(self._aid, self.trips)
         return tid
 
     def open_trip(self, trip_id: str) -> bool:
@@ -277,6 +305,10 @@ class Planner:
         rec = next((t for t in self.trips if t["id"] == trip_id), None)
         if not rec:
             return False
+        if rec.get("state") is None:  # a trip saved to the account: its full plan loads now
+            rec["state"] = load_trip_plan(self._aid, trip_id)
+            if not rec["state"]:
+                return False
         self.save_trip()
         self.thread_id = str(uuid.uuid4())
         self.graph.update_state(self.cfg, dict(rec["state"]), as_node="concierge")
@@ -288,7 +320,7 @@ class Planner:
         self.trips = [t for t in self.trips if t["id"] != trip_id]
         if self.trip_id == trip_id:
             self.trip_id = None
-        save_trips(self.profile_name, self.trips, self.profile, self._pin)
+        save_trips(self._aid, self.trips)
 
     def reset(self):
         """New trip: the current plan is kept in My trips, then a fresh conversation starts."""

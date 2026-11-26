@@ -1,74 +1,86 @@
-"""AI memory with privacy controls.
+"""AI memory with privacy controls, tied to Saguaro accounts.
 
-- Off by default. Nothing is written to disk unless the traveler turns memory on.
-- Stored locally only, under data/profiles/. The file name is a salted hash of (name, PIN): the name
-  alone can't open someone's profile, and names are not visible on disk.
-- "Forget me" deletes the file.
-What is kept: cuisine/interest counts from past requests, diet and accessibility needs,
-liked/disliked place categories (feedback), favorites, and IDs of places already shown
-(past-experience tracking, so repeat plans feel fresh).
+- Guests (not signed in): nothing is ever written. Preferences and trips last only for the visit.
+- Signed in: preferences and trips are saved to the account (see accounts.py / store.py), under the account's
+  random id, so they come back on any device after signing in. Saying "turn off memory" stops learning new
+  preferences; "forget me" deletes what was learned and the saved trips (the account stays).
+What is kept: cuisine/interest counts from past requests, diet and accessibility needs, liked/disliked place
+categories (feedback), favorites, and IDs of places already shown (so repeat plans feel fresh).
 """
 from __future__ import annotations
 
-import hashlib
-import json
+import re
 
-from .config import DATA_DIR
-
-PROFILE_DIR = DATA_DIR / "profiles"
+from .store import get_store
 
 
-def _path(name: str | None, pin: str | None = ""):
-    ident = hashlib.pbkdf2_hmac("sha256", f"{(name or 'default').strip().lower()}|{pin or ''}".encode(),
-                                b"saguaro-profile-v1", 50_000).hex()[:40]
-    return PROFILE_DIR / f"{ident}.json"
+def _key(account_id: str, what: str) -> str:
+    if not re.fullmatch(r"[0-9a-f]{16,64}", account_id or ""):
+        raise ValueError("bad account id")
+    return f"{what}/{account_id}.json"
 
 
-def load_profile(name: str | None, pin: str | None = "") -> dict:
-    p = _path(name, pin)
-    if p.exists():
-        try:
-            return json.loads(p.read_text(encoding="utf-8"))
-        except Exception:
-            return {"memory_on": False}
-    return {"memory_on": False}
+def load_profile(account_id: str | None) -> dict:
+    """The saved preferences of a signed-in account (memory on unless they turned it off); guests: empty."""
+    if not account_id:
+        return {"memory_on": False}
+    prof = get_store().get(_key(account_id, "profiles"))
+    return prof if isinstance(prof, dict) else {"memory_on": True}
 
 
-def save_profile(name: str | None, profile: dict, pin: str | None = "") -> None:
-    p = _path(name, pin)
-    if profile.get("_forget"):
-        if p.exists():
-            p.unlink()
+def save_profile(account_id: str | None, profile: dict) -> None:
+    if not account_id:
         profile.pop("_forget", None)
-        return
-    if not profile.get("memory_on"):
-        return  # privacy: never write unless the traveler opted in
-    PROFILE_DIR.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(profile, indent=1), encoding="utf-8")
+        return  # guests: never written
+    if profile.get("_forget"):  # "forget me": wipe what was learned, keep the account (memory stays on)
+        profile.clear()
+        profile["memory_on"] = True
+    get_store().put(_key(account_id, "profiles"), {k: v for k, v in profile.items() if not k.startswith("_")})
 
 
-def _trips_path(name: str | None, pin: str | None = ""):
-    return _path(name, pin).with_suffix(".trips.json")
-
-
-def load_trips(name: str | None, pin: str | None = "") -> list[dict]:
-    """Past trips (only stored when memory is on)."""
-    p = _trips_path(name, pin)
-    try:
-        data = json.loads(p.read_text(encoding="utf-8")) if p.exists() else []
-        return data if isinstance(data, list) else []
-    except Exception:
+def load_trips(account_id: str | None) -> list[dict]:
+    """The account's saved trips: the summary list only (each trip's full plan loads when it's opened)."""
+    if not account_id:
         return []
+    data = get_store().get(_key(account_id, "trips"))
+    return [dict(t) for t in data if isinstance(t, dict) and t.get("id")] if isinstance(data, list) else []
 
 
-def save_trips(name: str | None, trips: list[dict], profile: dict, pin: str | None = "") -> None:
-    p = _trips_path(name, pin)
-    if profile.get("_forget") or not profile.get("memory_on"):
-        if profile.get("_forget") and p.exists():
-            p.unlink()
-        return  # privacy: never write unless the traveler opted in
-    PROFILE_DIR.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(trips, default=str), encoding="utf-8")
+def _trip_key(account_id: str, trip_id: str) -> str:
+    if not re.fullmatch(r"[0-9a-f]{6,32}", trip_id or ""):
+        raise ValueError("bad trip id")
+    return f"trip-plans/{_key(account_id, 'x')[2:-5]}-{trip_id}.json"
+
+
+def load_trip_plan(account_id: str | None, trip_id: str) -> dict | None:
+    if not account_id:
+        return None
+    data = get_store().get(_trip_key(account_id, trip_id))
+    return data if isinstance(data, dict) else None
+
+
+def save_trips(account_id: str | None, trips: list[dict]) -> None:
+    """Save the trip list (small) and each trip's full plan in its own file (a plan is ~250 KB; one file per trip
+    keeps every file well under the storage's 1 MB read limit). Plans of trips that were removed are deleted."""
+    if not account_id:
+        return
+    store = get_store()
+    before = {t.get("id") for t in (store.get(_key(account_id, "trips")) or []) if isinstance(t, dict)}
+    for t in trips:
+        if t.get("state") is not None:
+            store.put(_trip_key(account_id, t["id"]), t["state"])
+    store.put(_key(account_id, "trips"), [{k: v for k, v in t.items() if k != "state"} for t in trips])
+    for gone in before - {t["id"] for t in trips}:
+        if gone:
+            store.delete(_trip_key(account_id, gone))
+
+
+def delete_all(account_id: str) -> None:
+    store = get_store()
+    for t in load_trips(account_id):
+        store.delete(_trip_key(account_id, t["id"]))
+    store.delete(_key(account_id, "profiles"))
+    store.delete(_key(account_id, "trips"))
 
 
 def update_from_turn(profile: dict, out: dict) -> dict:
