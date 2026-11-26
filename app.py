@@ -128,7 +128,8 @@ h1 { letter-spacing: -0.01em; }
 .az-dark img[data-testid="stHeaderLogo"] { content: url("%s"); }
 /* Streamlit Cloud's "Fork" / GitHub / share buttons in the app's top bar: not shown to visitors */
 [data-testid="stToolbarActions"] { display: none !important; }
-/* the zero-height helper frame below takes no space */
+/* the zero-height helper frames take no space */
+.st-key-sessbridge { display: none; }
 [data-testid="stElementContainer"]:has(iframe[height="0"]), .element-container:has(iframe[height="0"]) { display: none; }
 </style>""" % ("Working..." if st.session_state.get("_ready") else "Connecting...", _dark_logo_uri()))
 # Streamlit Community Cloud wraps the app in its own page: it adds a "Hosted with Streamlit" badge and the creator's
@@ -347,7 +348,6 @@ def warm():
 
 
 _T0 = time.time()
-SESSION_COOKIE = "az_session"  # "keep me signed in" (see accounts.py)
 warm()
 ss = st.session_state
 if "planner" not in ss:
@@ -357,14 +357,6 @@ if "planner" not in ss:
     ss.msg_limit, ss.join_limit = RateLimiter(20, 60), RateLimiter(5, 600)
     ss.login_limit, ss.key_limit = RateLimiter(8, 600), RateLimiter(5, 600)
     ss.session_token = None
-    try:  # "keep me signed in": this browser's sign-in cookie (only a hash of it is stored on our side)
-        _tok = st.context.cookies.get(SESSION_COOKIE)
-        _acc = accounts.resume_session(_tok)
-        if _acc:
-            ss.planner.sign_in(_acc)
-            ss.session_token = _tok
-    except Exception as _e:
-        logging.getLogger("app").warning("sign-in from cookie failed: %s", type(_e).__name__)
 
 
 # ================================================================== helpers
@@ -574,6 +566,7 @@ def key_dialog():
 def finish_sign_in(account: dict, keep: bool, msg: str):
     """Signed in (or just created): use the account's preferences and trips, and remember this browser if asked."""
     ss.planner.sign_in(account)
+    ss.pop("_signed_out", None)
     if keep:
         ss.session_token = accounts.new_session(account)
         ss["_cookie"] = ("set", ss.session_token)
@@ -588,6 +581,7 @@ def sign_out(delete: bool = False):
         accounts.end_session(ss.session_token)
     ss.session_token = None
     ss["_cookie"] = ("clear", "")
+    ss["_signed_out"] = True
     ss.planner.sign_out()
     ss.chat, ss.votes, ss.changes, ss.changed_ids, ss.unseen, ss.updated_at = [], {}, [], set(), 0, None
     ss.pop("day_pick", None)
@@ -772,12 +766,6 @@ def top_bar():
         else:
             signin_clicked = st.button("Sign in", icon=I["user"], type="tertiary",
                                        help="Keep your preferences and trips for next time")
-    if ss.get("_cookie"):  # "keep me signed in": set (or clear) this browser's sign-in cookie
-        op, tok = ss.pop("_cookie")
-        js = (f"document.cookie='{SESSION_COOKIE}=' + {tok!r} + '; Max-Age={accounts.SESSION_DAYS * 86400}; Path=/; "
-              "SameSite=Lax'+(location.protocol==='https:'?'; Secure':'');" if op == "set" else
-              f"document.cookie='{SESSION_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax'+(location.protocol==='https:'?'; Secure':'');")
-        components.html("<script>%s</script>" % in_app_page(js), height=0)
     if ss.get("_theme_switch"):  # flip the theme once per click. Streamlit may draw this frame again later (another
         # page, a reconnect), so the click's id is remembered in the tab and a repeat does nothing
         nid = ss["_theme_switch"]
@@ -792,6 +780,28 @@ def top_bar():
         account_dialog()
     if new_clicked:
         start_new_trip()
+
+
+_session_bridge = components.declare_component("az_session", path=str(Path(__file__).parent / "assets" / "session_component"))
+
+
+def session_bridge():
+    """'Keep me signed in': an invisible helper (assets/session_component) keeps the sign-in token in this browser's
+    storage and hands it back when the app opens; only a hash of the token is kept on our side (accounts.py)."""
+    import secrets
+    op = ss.pop("_cookie", None)  # ("set", token) after signing in, ("clear", "") after signing out
+    if op:
+        ss["_bridge_args"] = {"op": op[0], "token": op[1], "n": secrets.token_hex(4)}
+    with st.container(key="sessbridge"):
+        tok = _session_bridge(**ss.get("_bridge_args", {"op": "", "token": "", "n": ""}), default=None, key="az_bridge")
+    if (tok and isinstance(tok, str) and not ss.planner.account and not ss.get("_signed_out")
+            and ss.get("_resume_tried") != tok):
+        ss["_resume_tried"] = tok
+        acc = accounts.resume_session(tok)
+        if acc:
+            ss.planner.sign_in(acc)
+            ss.session_token = tok
+            st.rerun()
 
 
 def start_new_trip():
@@ -1639,6 +1649,7 @@ st.logo(str(Path(__file__).parent / "assets" / "wordmark.png"), size="large")
 nav = st.navigation([plan_page, map_page, trips_page, group_page], position="top")
 
 top_bar()
+session_bridge()
 auto_sync()
 nav.run()
 ss["_ready"] = True  # first full page shown: later runs say "Working..." instead of "Connecting..."

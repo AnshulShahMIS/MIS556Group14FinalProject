@@ -1,0 +1,28 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>sign-in bridge</title></head><body>
+<script>
+// "Keep me signed in" for Saguaro (see app.py, session_bridge): the sign-in token is kept in this browser's
+// localStorage, on the app's own site. This invisible component hands it to the app when the page opens, and saves or
+// removes it when the app says so. Nothing else is read or sent.
+var KEY = "az_session";
+function send(type, data) { window.parent.postMessage(Object.assign({isStreamlitMessage: true, type: type}, data || {}), "*"); }
+function store() { try { return window.parent.localStorage; } catch (e) { return window.localStorage; } }
+function current() { try { return store().getItem(KEY) || ""; } catch (e) { return ""; } }
+var lastOp = null;
+window.addEventListener("message", function (ev) {
+  var m = ev.data || {};
+  if (m.type !== "streamlit:render") return;
+  var a = m.args || {};
+  if (a.op && a.n !== lastOp) {
+    lastOp = a.n;
+    try {
+      if (a.op === "set" && /^[A-Za-z0-9_-]{20,100}$/.test(a.token || "")) store().setItem(KEY, a.token);
+      if (a.op === "clear") store().removeItem(KEY);
+    } catch (e) {}
+  }
+  send("streamlit:setComponentValue", {value: current(), dataType: "json"});
+});
+send("streamlit:componentReady", {apiVersion: 1});
+send("streamlit:setFrameHeight", {height: 0});
+</script>
+</body></html>
