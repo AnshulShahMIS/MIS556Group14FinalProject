@@ -123,6 +123,13 @@ any device. There's no password reset, so the sign-up form asks people to keep t
 with times, places, links, costs, the budget and the Google Maps route) and a calendar file to download. If the trip
 changes afterwards, the button becomes **Confirm changes**.
 
+**Share** (on the trip card) creates a **view-only link**: anyone who opens it sees the trip - days, times, places
+with links, costs, the map, a calendar file and the Google Maps route - without an account, and can't change anything.
+The link always shows the latest version; **Stop sharing** (or deleting the trip or the account) turns it off. It
+carries a long random code and shares only the plan and the owner's username - not the chat, preferences, checklist
+ticks or reservation confirmation numbers (`src/azmulti/sharelink.py`, `tests/test_sharelink.py`). For friends who
+should edit and vote, the same window links to **Group**.
+
 **Checklist** (first tab under the trip) lists what to book or check before going, built from the plan and the place
 data: hotels to book (3 weeks ahead), tables where reservations are recommended (a week ahead) or taken (2 days),
 tickets for paid attractions (3 days), opening hours our data isn't sure about (the day before), the forecast, and

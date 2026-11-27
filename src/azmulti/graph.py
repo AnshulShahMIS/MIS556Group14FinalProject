@@ -258,6 +258,9 @@ class Planner:
 
     def forget(self) -> None:
         """Delete what was learned about the traveler, and their saved trips (a signed-in account stays)."""
+        from . import sharelink
+        for t in self.trips:
+            sharelink.revoke(t.get("share_token"))
         self.profile = {"memory_on": bool(self.account), "_forget": True}
         self.trips, self.trip_id = [], None
         save_trips(self._aid, [])
@@ -268,7 +271,7 @@ class Planner:
     TRIP_KEYS = ("request", "slots", "conditions", "budget", "quality", "route", "issues", "booking", "answer",
                  "events", "reservations", "notes", "options")
     MAX_TRIPS = 20
-    KEEP_ON_SAVE = ("confirmed_at", "confirmed_sig", "checklist_done")
+    KEEP_ON_SAVE = ("confirmed_at", "confirmed_sig", "checklist_done", "share_token")
 
     def save_trip(self, state: dict | None = None) -> str | None:
         """Save (or update) a plan in My trips. Returns its trip id."""
@@ -303,6 +306,9 @@ class Planner:
         self.trips = self.trips[:self.MAX_TRIPS]
         if state is None:
             self.trip_id = tid
+        if rec.get("share_token"):  # a view-only link is out: it shows the latest version of the trip
+            from . import sharelink
+            sharelink.publish(rec["share_token"], st, rec, self.profile_name or "")
         save_trips(self._aid, self.trips)
         return tid
 
@@ -353,6 +359,29 @@ class Planner:
         save_trips(self._aid, self.trips)
         return True, "Trip confirmed."
 
+    # ---------------- view-only share links (sharelink.py)
+    def share_link(self) -> str | None:
+        """The current trip's view-only link token (created if needed)."""
+        from . import sharelink
+        rec = self._current_rec()
+        if not rec:
+            return None
+        if not rec.get("share_token"):
+            rec["share_token"] = sharelink.new_token()
+            self.save_trip()  # publishes the snapshot and saves the token with the trip
+        return rec["share_token"]
+
+    def shared_token(self) -> str | None:
+        rec = next((t for t in self.trips if t["id"] == self.trip_id), None) if self.trip_id else None
+        return (rec or {}).get("share_token")
+
+    def stop_sharing(self) -> None:
+        from . import sharelink
+        rec = self._current_rec()
+        if rec and rec.get("share_token"):
+            sharelink.revoke(rec.pop("share_token"))
+            save_trips(self._aid, self.trips)
+
     def open_trip(self, trip_id: str) -> bool:
         """Make a saved trip the current plan again (the current one stays saved)."""
         rec = next((t for t in self.trips if t["id"] == trip_id), None)
@@ -370,6 +399,10 @@ class Planner:
         return True
 
     def delete_trip(self, trip_id: str) -> None:
+        from . import sharelink
+        for t in self.trips:
+            if t["id"] == trip_id and t.get("share_token"):
+                sharelink.revoke(t["share_token"])  # its view-only link stops working too
         self.trips = [t for t in self.trips if t["id"] != trip_id]
         if self.trip_id == trip_id:
             self.trip_id = None

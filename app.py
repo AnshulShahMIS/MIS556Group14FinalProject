@@ -483,7 +483,7 @@ def stars(p: dict) -> str:
 
 def goto(where: str | None):
     """Switch pages outside any form/column context."""
-    if where and ss.planner.account:
+    if where and ss.planner.account and not VIEWING:
         st.switch_page({"itinerary": plan_page, "chat": plan_page, "plan": plan_page, "map": map_page,
                         "trips": trips_page, "group": group_page}[where])
 
@@ -630,6 +630,116 @@ def account_forms():
                 if ok:
                     finish_sign_in(acc, keep, msg)
                 st.error(msg)
+
+
+def share_url(token: str) -> str:
+    """The view-only link for a token (AZ_PUBLIC_URL overrides; locally the dev server)."""
+    base = os.getenv("AZ_PUBLIC_URL") or ("https://saguaro.streamlit.app/?embed=true" if sys.platform.startswith("linux")
+                                          else "http://localhost:8501/?")
+    return base + ("" if base.endswith("?") else "&") + "trip=" + token
+
+
+@st.dialog("Share this trip")
+def share_dialog():
+    st.markdown("**View-only link**")
+    st.caption("Anyone with the link can see this trip - the plan, times, places, costs and map - without an account. "
+               "They can't change anything. The link always shows your latest version.")
+    tok = ss.planner.shared_token()
+    if not tok:
+        if st.button("Create view-only link", icon=":material/link:", type="primary", use_container_width=True):
+            ss.planner.share_link()
+            st.rerun(scope="fragment")
+    else:
+        st.code(share_url(tok), language=None, wrap_lines=True)
+        st.caption("Copy it with the button at the right of the box, then send it by text, email or chat.")
+        c1, c2 = st.columns(2)
+        c1.link_button("Open it", share_url(tok), icon=":material/open_in_new:", use_container_width=True)
+        if c2.button("Stop sharing", icon=":material/link_off:", use_container_width=True,
+                     help="The link stops working right away. You can make a new one later."):
+            ss.planner.stop_sharing()
+            st.rerun(scope="fragment")
+    st.divider()
+    st.markdown("**Plan together**")
+    st.caption("To let friends change the trip and vote on stops, use a group code (they sign in to Saguaro).")
+    if st.button("Go to Group", icon=I["group"], use_container_width=True):
+        ss["_goto"] = "group"
+        st.rerun()
+
+
+def page_shared_trip():
+    """A trip someone shared with a view-only link: no sign-in, nothing can be changed."""
+    from azmulti import sharelink
+    snap = sharelink.load(st.query_params.get("trip"))
+    _, mid, _ = st.columns([0.4, 5, 0.4])
+    with mid:
+        if not snap:
+            st.title("This link doesn't work anymore", anchor=False)
+            st.markdown("The trip may have been deleted, or its owner stopped sharing it.")
+            if st.button("Go to Saguaro", type="primary"):
+                st.query_params.clear()
+                st.rerun()
+            return
+        stt = snap["state"]
+        req, cond, b = stt.get("request") or {}, stt.get("conditions") or {}, stt.get("budget") or {}
+        stops = [s for s in stt.get("slots") or [] if s.get("place")]
+        title = " → ".join(lg["city"] for lg in req.get("legs") or []) or snap.get("title") or req.get("city", "")
+        party = snap.get("party", 2)
+        with card():
+            st.caption("Shared trip · view only")
+            st.title(title, anchor=False)
+            st.caption(" · ".join(x for x in [snap.get("when"), f"{snap.get('days', 1)} day{'s' if snap.get('days', 1) > 1 else ''}",
+                                              f"{party} traveler{'s' if party > 1 else ''}",
+                                              f"shared by {snap['owner']}" if snap.get("owner") else ""] if x))
+            if b.get("total_pp") is not None:
+                st.markdown(f"**About ${b['total_pp']:.0f} per person**" + (f" · ${b['group_total']:.0f} for the group"
+                                                                            if b.get("group_total") else ""))
+        trip_map(list(enumerate(stops, 1)), height=320)
+        first = datetime.fromisoformat(cond["date"]) if cond.get("date") else None
+        stays = city_stays(req.get("legs"))
+        by_day = cond.get("by_day") or {}
+        day = None
+        for n, s in enumerate(stops, 1):
+            p = s["place"]
+            if s.get("day") != day:
+                day = s.get("day")
+                if day in stays and len(stays) > 1:
+                    city, cdays = stays[day]
+                    st.subheader(f"{city} · {cdays} day{'s' if cdays > 1 else ''}", anchor=False)
+                st.markdown(f"**Day {day}" + (f" · {first + timedelta(days=day - 1):%A, %B} {(first + timedelta(days=day - 1)).day}"
+                                              if first else "") + "**")
+                wx = by_day.get(day) or by_day.get(str(day))
+                if wx:
+                    st.caption(f"{wx['city']}: high {wx['high_f']}°F · sunset {fmt_time(wx['sunset'])}")
+            if s.get("drive_min") and n > 1 and not s.get("transfer"):
+                st.caption(f":material/more_vert: {s['drive_min']} min {MODE.get(req.get('transport', 'car'), 'drive')} · {dist(s.get('drive_km'))}")
+            with card():
+                c = st.columns([1.05, 5, 1.4], vertical_alignment="center")
+                start, _, end = (s.get("time") or "").partition(" - ")
+                c[0].markdown(f"**{start}**")
+                if end:
+                    c[0].caption(f"to {end}")
+                name = f"[{p['name']}]({safe_url(p.get('url'))})" if safe_url(p.get("url")) else p["name"]
+                cost = f"~${s['cost_pp']:.0f}" + (" a night" if s["kind"] == "lodging" else "") if s.get("cost_pp") else "free"
+                c[1].markdown(md(f"**{n}. {name}**"))
+                c[1].caption(md(f"{s.get('label', '')} · {KIND.get(s['kind'], ('Stop',))[0]} · "
+                                f"{(p.get('rating') or 0):.1f}★ · {cost} · {p.get('city', '')}"))
+                if s.get("reason"):
+                    c[1].caption(md(snip(s["reason"], 160)))
+                d = (s.get("booking") or {}).get("links", {}).get("Directions")
+                if safe_url(d):
+                    c[2].link_button("Directions", safe_url(d), icon=I["directions"], use_container_width=True)
+        bk = stt.get("booking") or {}
+        cols = st.columns(3)
+        if bk.get("ics"):
+            cols[0].download_button("Add to my calendar", bk["ics"], file_name="saguaro-trip.ics", mime="text/calendar",
+                                    icon=I["calendar"], use_container_width=True)
+        if safe_url(bk.get("route_url")):
+            cols[1].link_button("Route in Google Maps", safe_url(bk["route_url"]), icon=I["route"], use_container_width=True)
+        if cols[2].button("Plan your own trip", icon=I["spark"], type="primary", use_container_width=True):
+            st.query_params.clear()
+            st.rerun()
+        st.caption("Hours and prices come from Google Maps (2021) and TripAdvisor. Please verify before you go. "
+                   "Planned with Saguaro (MIS 556, Group 14).")
 
 
 def page_login():
@@ -788,7 +898,7 @@ def top_bar():
     """The AI status and the account buttons, shown on the right of the header bar (next to Plan / Map / My trips /
     Group); on narrow screens they drop to their own row under the header (see the .st-key-topbar style)."""
     has_plan = bool(plan_state())
-    acc = ss.planner.account
+    acc = None if VIEWING else ss.planner.account  # a shared-trip page shows only the theme switch
     key_clicked = prefs_clicked = new_clicked = False
     with st.container(horizontal=True, horizontal_alignment="right", vertical_alignment="center", gap="small",
                       wrap=True, key="topbar"):
@@ -1266,8 +1376,9 @@ def trip_panel(st_: dict):
         if h[1].button(label, icon=":material/task_alt:", type=kind, use_container_width=True, help=tip):
             ss.pop("_confirmed_now", None)
             confirm_dialog()
-        if h[2].button("Share", icon=I["share"], use_container_width=True, help="Plan together: share this trip with a code"):
-            ss["_goto"] = "group"
+        if h[2].button("Share", icon=I["share"], use_container_width=True,
+                       help="A view-only link anyone can open, or plan together with a group code"):
+            share_dialog()
         st.caption(" · ".join(x for x in [
             day_txt, f"{req.get('party_size', 2)} {'travelers' if req.get('party_size', 2) > 1 else 'traveler'}",
             f"{ndays} days" if ndays > 1 else "",
@@ -1731,7 +1842,7 @@ def page_trips():
                     if b[0].button("View", key=f"tv-{t['id']}", type="primary", use_container_width=True):
                         ss["_goto"] = "plan"
                     if b[1].button("Share", key=f"ts-{t['id']}", use_container_width=True):
-                        ss["_goto"] = "group"
+                        share_dialog()
                 else:
                     if b[0].button("Open", key=f"topen-{t['id']}", use_container_width=True,
                                    help="Make this the current trip (your current one stays saved here)"):
@@ -1754,7 +1865,11 @@ map_page = st.Page(safe(page_map), title="Map", icon=I["map"], url_path="map")
 trips_page = st.Page(safe(page_trips), title="My trips", icon=I["trips"], url_path="trips")
 group_page = st.Page(safe(page_group), title="Group", icon=I["group"], url_path="group")
 st.logo(str(Path(__file__).parent / "assets" / "wordmark.png"), size="large")
-if ss.planner.account:
+VIEWING = bool(st.query_params.get("trip"))  # a view-only link (?trip=...): no sign-in needed
+if VIEWING:
+    nav = st.navigation([st.Page(safe(page_shared_trip), title="Shared trip", icon=I["trips"], default=True)],
+                        position="hidden")
+elif ss.planner.account:
     nav = st.navigation([plan_page, map_page, trips_page, group_page], position="top")
 else:  # an account is required: every address shows the sign-in page
     def _login_at(path: str):  # the app's other addresses (/map, /trips, /group) show the sign-in page too

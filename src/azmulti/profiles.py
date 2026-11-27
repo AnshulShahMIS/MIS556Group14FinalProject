@@ -76,8 +76,10 @@ def save_trips(account_id: str | None, trips: list[dict]) -> None:
 
 
 def delete_all(account_id: str) -> None:
+    from .sharelink import revoke
     store = get_store()
     for t in load_trips(account_id):
+        revoke(t.get("share_token"))  # view-only links stop working
         store.delete(_trip_key(account_id, t["id"]))
     store.delete(_key(account_id, "profiles"))
     store.delete(_key(account_id, "trips"))
