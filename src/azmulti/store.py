@@ -218,12 +218,11 @@ def get_store():
     """The store for this server: the private GitHub repo when configured, else local files."""
     global _STORE
     with _STORE_LOCK:
-        if _STORE is None:
-            repo, token = os.getenv("AZ_STORE_REPO", "").strip(), os.getenv("AZ_STORE_TOKEN", "").strip()
-            if repo and token and os.getenv("AZ_OFFLINE", "0") != "1":
-                _STORE = GitHubStore(repo, token, os.getenv("AZ_STORE_BRANCH", "main"))
-            else:
-                _STORE = LocalStore()
+        repo, token = os.getenv("AZ_STORE_REPO", "").strip(), os.getenv("AZ_STORE_TOKEN", "").strip()
+        wanted = bool(repo and token and os.getenv("AZ_OFFLINE", "0") != "1")
+        # the secrets may be added (or changed) while the app is running: switch over then, without a restart
+        if _STORE is None or (wanted and (not isinstance(_STORE, GitHubStore) or (_STORE.repo, _STORE._token) != (repo, token))):
+            _STORE = GitHubStore(repo, token, os.getenv("AZ_STORE_BRANCH", "main")) if wanted else LocalStore()
         return _STORE
 
 
