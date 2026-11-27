@@ -54,6 +54,8 @@ def _num(tok: str) -> int | None:
     return int(tok) if tok.isdigit() else NUM.get(tok)
 
 
+RENTAL_RX = re.compile(r"\b(rental car|rent(?:ing)? a (?:car|vehicle|suv|minivan)|car rental|hire a car|"
+                       r"(?:need|get|want) (?:a )?(?:rental|car to drive)|pick up a car)\b")
 MAX_DAYS = 14
 _MON = r"(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?"
 _TO = r"\s*(?:-|–|—|to|through|thru|until|till)\s*"
@@ -245,6 +247,8 @@ def parse_request_rules(text: str) -> TripRequest:
         r.transport = "rideshare"
     elif re.search(r"\b(light rail|bus|transit|public transport|metro|streetcar)\b", t):
         r.transport = "transit"
+    if RENTAL_RX.search(t):  # "we need a rental car": drive, and add the rental to the budget and checklist
+        r.rental_car, r.transport = True, "car"
     # Price, quality, atmosphere, indoor/outdoor, discounts, options
     r.free_only = bool(re.search(r"\bfree (things|stuff|activities|activity|attractions|day)\b|\bonly free\b|\bfor free\b|\bno cost\b", t))
     m = re.search(r"\b(\d(?:\.\d)?)\s*(?:\+\s*stars?|stars?|★)", t)

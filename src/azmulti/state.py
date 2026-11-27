@@ -42,6 +42,7 @@ class TripRequest(BaseModel):
     radius_km: float = 30.0
     zip_code: Optional[str] = Field(None, description="5-digit Arizona ZIP code to plan around, if given")
     transport: Literal["car", "rideshare", "walking", "transit"] = "car"
+    rental_car: bool = Field(False, description="traveler needs to rent a car for the trip (transport is then 'car')")
     free_only: bool = Field(False, description="traveler wants free activities")
     min_rating: Optional[float] = Field(None, description="e.g. 4.5 for 'highly rated' / '4.5 stars or better'")
     atmosphere: Optional[str] = Field(None, description="one of Romantic, Upscale, Cozy, Casual, Historic, Trendy")
@@ -99,6 +100,7 @@ class PlannerState(TypedDict, total=False):
     needs_skeleton: bool
     conditions: dict           # weather / sunrise / sunset from the Weather agent
     events: list[dict]
+    rental: Optional[dict]     # the Car Rental agent's decision (car size, pickup, days, cost, link), if a car is rented
     options: Optional[dict]    # budget / balanced / premium variants
     profile: dict              # AI memory (only persisted when the traveler opts in)
     pending: Optional[dict]    # a booking waiting for the traveler's approval

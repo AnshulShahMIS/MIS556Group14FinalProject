@@ -232,6 +232,13 @@ def budget_node(state: PlannerState) -> dict:
         transport = 0.0
     else:
         transport = round(km * COST_PER_KM * cars / party, 2)
+    rental = 0.0
+    rc = state.get("rental") if mode == "car" else None  # decided by the Car Rental agent
+    if rc:
+        rental = rc["per_person"]
+        lines.append({"stop": "Getting around", "place": f"Rental car: {rc['cars']} {rc['size']}, {rc['days']} day{'s' if rc['days'] > 1 else ''}",
+                      "category": "rental car", "per_person": rental,
+                      "basis": f"estimate: about ${rc['rate_per_day']:.0f} a day per car, before gas"})
     # Cheaper alternatives: for each paid stop, the cheapest alternative the specialist also liked
     for s in slots:
         alts = [a for a in s.get("alternatives") or [] if (a.get("cost_pp") or 0) < (s.get("cost_pp") or 0) - 1]
@@ -242,15 +249,15 @@ def budget_node(state: PlannerState) -> dict:
                     line["cheaper_option"] = f"{best['name']} (~${best.get('cost_pp') or 0:.0f})"
     food = sum(l["per_person"] for l in lines if l["category"] == "food")
     stay = sum(l["per_person"] for l in lines if l["category"] == "stay")
-    activities = sum(l["per_person"] for l in lines if l["category"] not in ("food", "stay"))
-    total = round(food + activities + stay + transport, 2)
+    activities = sum(l["per_person"] for l in lines if l["category"] not in ("food", "stay", "rental car"))
+    total = round(food + activities + stay + transport + rental, 2)
     extras = round(food * 0.25, 2)  # tax + tip on meals
     budget = req.get("budget_per_person")
     tolerance = max(5.0, 0.05 * budget) if budget else 0
     status = ("no budget given" if not budget else "within budget" if total <= budget
               else "slightly over budget" if total - budget <= tolerance else "over budget")
     b = {"lines": lines, "food": round(food, 2), "activities": round(activities, 2), "stay": round(stay, 2), "transport": transport,
-         "transport_mode": mode, "total_pp": total, "extras_pp": extras, "group_total": round(total * party, 2),
+         "transport_mode": mode, "rental_pp": rental, "total_pp": total, "extras_pp": extras, "group_total": round(total * party, 2),
          "party_size": party, "budget_pp": budget, "status": status,
          "remaining_pp": round(budget - total, 2) if budget else None,
          "free_stops": [l["place"] for l in lines if l["per_person"] == 0]}

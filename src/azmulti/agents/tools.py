@@ -187,6 +187,8 @@ def detect_command(text: str, state) -> dict | None:
         return {"cmd": "realloc"}
     if re.search(r"how much|total cost|what('?s| is| will) (the |it )?cost|budget breakdown|split (the )?(bill|cost)|per person cost|cost breakdown", t) and has_plan:
         return {"cmd": "budget"}
+    if has_plan and re.search(r"rental car|rent(ing)? a (car|vehicle)|car rental|(our|my) own car|don'?t need a (rental|car)|no rental", t):
+        return {"cmd": "transport"}
     if re.search(r"\b(uber|lyft|rideshare|taxi|walk(ing)?|on foot|light rail|transit|bus|drive|driving)\b", t) and has_plan \
             and re.search(r"(we'?ll|we will|we'?re|we are|i'?ll|instead|switch|use|take|by|go by|no car|don'?t have a car)", t) and not re.search(r"\bplan\b", t):
         return {"cmd": "transport"}
@@ -1157,10 +1159,13 @@ def h_transport(state, cmd):
     if (e := ensure_plan(state)):
         return {"answer": e}
     t = state["user_message"].lower()
-    mode = ("walking" if re.search(r"walk|on foot", t) else "rideshare" if re.search(r"uber|lyft|rideshare|taxi|no car|don'?t have a car", t)
+    rental = bool(re.search(r"rental car|rent(ing)? a (car|vehicle)|car rental", t)) and not re.search(
+        r"(our|my) own car|don'?t need a (rental|car)|no rental", t)
+    mode = ("car" if rental else "walking" if re.search(r"walk|on foot", t) else
+            "rideshare" if re.search(r"uber|lyft|rideshare|taxi|no car|don'?t have a car", t)
             else "transit" if re.search(r"light rail|transit|bus", t) else "car")
     st = copy.deepcopy(dict(state))
-    st["request"] = dict(st["request"], transport=mode)
+    st["request"] = dict(st["request"], transport=mode, rental_car=rental)
     st["trace"] = state.get("trace", [])
     if mode in ("walking", "transit"):  # re-pick stops so they are close enough
         fs = [s for s in st["slots"] if s.get("place")]
@@ -1172,8 +1177,10 @@ def h_transport(state, cmd):
         st = run_pipeline(st)
     else:
         st = run_pipeline(st, refill=False)
-    out = {k: st[k] for k in ("slots", "budget", "quality", "route", "issues", "booking", "trace", "request")}
-    out["answer"] = f"Switched to **{mode}**.\n\n" + st["answer"]
+    out = {k: st.get(k) for k in ("slots", "budget", "quality", "route", "issues", "booking", "trace", "request", "rental")}
+    out["answer"] = (("Added a **rental car**: it's in your budget and on the Checklist with a booking link."
+                      if rental else f"Switched to **{mode}**" + (" - no rental car." if state["request"].get("rental_car") else "."))
+                     + "\n\n" + st["answer"])
     out["_did"] = f"transport -> {mode}"
     return out
 

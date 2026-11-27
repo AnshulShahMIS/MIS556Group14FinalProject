@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from .store import get_store
 
 TOKEN_RX = re.compile(r"^[A-Za-z0-9_-]{20,64}$")
-VIEW_KEYS = ("request", "slots", "conditions", "budget", "route", "booking", "events", "reservations")
+VIEW_KEYS = ("request", "slots", "conditions", "budget", "route", "booking", "events", "reservations", "rental")
 REQUEST_KEYS = ("city", "legs", "days", "party_size", "transport", "trip_date", "weekday")
 
 

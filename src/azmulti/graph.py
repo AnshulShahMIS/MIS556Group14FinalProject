@@ -1,6 +1,6 @@
 """Method 4 - agentic workflow & state orchestration (LangGraph).
 
-    planner ─┬─ new_plan / revise ─> weather & events ─> attraction ─> dining ─> live info ─> route ─> budget ─> critic ─┬─> booking ─> concierge ─> END
+    planner ─┬─ new_plan / revise ─> weather & events ─> attraction ─> dining ─> live info ─> route ─> car rental ─> budget ─> critic ─┬─> booking ─> concierge ─> END
              │                                               ^                                             │
              │                                               └──────────── repair (≤ 2 replans) <──────────┘
              ├─ tools (options, compare, nearby, book+approve, favorites, feedback, memory, events,
@@ -23,6 +23,7 @@ from .agents.critic import critic_node, repair_node, route_after_critic
 from .agents.live_agent import live_node
 from .agents.logistics import budget_node, route_node
 from .agents.planner import planner_node
+from .agents.rental_agent import rental_node
 from .agents.specialists import attraction_node, dining_node, lodging_node
 from .agents.tools import tools_node
 from .agents.weather_agent import weather_node
@@ -44,6 +45,7 @@ def build_graph(checkpointer=None):
     g.add_node("lodging_agent", lodging_node)
     g.add_node("live_agent", live_node)
     g.add_node("route_agent", route_node)
+    g.add_node("rental_agent", rental_node)
     g.add_node("budget_agent", budget_node)
     g.add_node("critic", critic_node)
     g.add_node("repair", repair_node)
@@ -60,7 +62,8 @@ def build_graph(checkpointer=None):
     g.add_edge("dining_agent", "lodging_agent")
     g.add_edge("lodging_agent", "live_agent")
     g.add_edge("live_agent", "route_agent")
-    g.add_edge("route_agent", "budget_agent")
+    g.add_edge("route_agent", "rental_agent")
+    g.add_edge("rental_agent", "budget_agent")
     g.add_edge("budget_agent", "critic")
     g.add_conditional_edges("critic", route_after_critic, {"repair": "repair", "booking": "booking_agent"})
     g.add_edge("repair", "attraction_agent")
@@ -268,7 +271,7 @@ class Planner:
         self.profile = {"memory_on": bool(self.account)}
 
     # ---------------- My trips: every plan is kept, "New trip" never throws one away
-    TRIP_KEYS = ("request", "slots", "conditions", "budget", "quality", "route", "issues", "booking", "answer",
+    TRIP_KEYS = ("request", "slots", "conditions", "budget", "quality", "route", "issues", "booking", "answer", "rental",
                  "events", "reservations", "notes", "options")
     MAX_TRIPS = 20
     KEEP_ON_SAVE = ("confirmed_at", "confirmed_sig", "checklist_done", "share_token")

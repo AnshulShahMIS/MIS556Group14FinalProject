@@ -517,7 +517,8 @@ def compose_request(city, day: tuple, length, adults, kids, budget, interests, f
     if food and food != "No preference":
         parts.append(f"{food.lower()} food for dinner")
     parts += [EXTRAS[e] for e in extras if not (kids and e.startswith("Night out"))]
-    parts.append({"Car": "", "Rideshare": "we'll take uber", "Walking": "walking only", "Transit": "by light rail and bus"}[transport])
+    parts.append({"Car": "", "Rental car": "we need a rental car", "Rideshare": "we'll take uber", "Walking": "walking only",
+                  "Transit": "by light rail and bus"}[transport])
     return ", ".join(p for p in parts if p)
 
 
@@ -835,7 +836,8 @@ def prefs_dialog():
     st.divider()
     st.markdown("**About**")
     st.caption("Saguaro is a team of AI agents (MIS 556, Group 14): Planner, Weather & Events, Attraction, Dining & Nightlife, "
-               "Live Info, Route, Budget, a Critic that scores and fixes the plan, Booking, and a Concierge that writes it up. "
+               "Lodging, Live Info, Route, Car Rental, Budget, a Critic that scores and fixes the plan, Booking, a Concierge that "
+               "writes it up, and Q&A. "
                f"Data: {len(get_catalog().df):,} Arizona places from Google Maps (2021) and TripAdvisor (2026). Your OpenAI key stays in this "
                "session only; trip details are sent only to the live services above.")
 
@@ -1152,7 +1154,8 @@ def start_view():
                 o = st.columns(2)
                 food = o[0].selectbox("Dinner", FOODS)
                 with o[1]:
-                    transport = st.segmented_control("Getting around", ["Car", "Rideshare", "Walking", "Transit"], default="Car")
+                    transport = st.segmented_control("Getting around", ["Car", "Rental car", "Rideshare", "Walking", "Transit"],
+                                                     default="Car")
                 extras = st.pills("Extras", list(EXTRAS), selection_mode="multi")
             if st.form_submit_button("Plan my trip", icon=":material/search:", type="primary", use_container_width=True):
                 if not city:
@@ -1400,6 +1403,10 @@ def trip_panel(st_: dict):
         hotels = sum(1 for s in stops if s["kind"] == "lodging")
         if hotels:
             chips.append(f":green-badge[{hotels} hotel night{'s' if hotels > 1 else ''}]")
+        rc = st_.get("rental")
+        if rc:
+            chips.append(f":blue-badge[Rental: {rc['cars']} {rc['size']}{'s' if rc['cars'] > 1 else ''}, "
+                         f"{'pick up at ' + rc['airport'] if rc.get('airport') else rc['pickup_city']}]")
         chips.append(f":gray-badge[Travel {(st_.get('route') or {}).get('minutes', 0)} min]")
         chips.append(f":violet-badge[Plan score {q.get('total', 0):.0f}/100]")
         todo = sum(1 for i in ss.planner.checklist() if not i["done"])

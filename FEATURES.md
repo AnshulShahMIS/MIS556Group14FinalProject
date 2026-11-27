@@ -129,7 +129,7 @@ Try the example phrases in the app's chat after making a plan.
 | Feature | Status | How / where |
 |---|---|---|
 | AI trip concierge | ✅ | Concierge + Q&A + tools agents |
-| Multi-agent architecture (restaurant, attraction, routing, budget, reservation) | ✅ | 12 agents in LangGraph (`graph.py`) |
+| Multi-agent architecture (restaurant, attraction, routing, budget, reservation) | ✅ | 13 agents in LangGraph (`graph.py`), including a Car Rental agent |
 | Automatic replanning (closures, unavailable bookings) | ✅ | Critic → repair loop; "dinner is fully booked" |
 | Natural-language planning ("$150 Scottsdale date night") | ✅ | GPT-4o structured output, rule fallback |
 | Explainable recommendations | ✅ | One-sentence, data-grounded "why" per stop + agent trace |

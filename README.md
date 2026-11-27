@@ -20,7 +20,7 @@ methods from our midterm milestone.
 | What | Where |
 |---|---|
 | The web app (all pages) | [`app.py`](app.py) |
-| The 12 agents and the LangGraph workflow | [`src/azmulti/graph.py`](src/azmulti/graph.py), [`src/azmulti/agents/`](src/azmulti/agents) |
+| The 13 agents and the LangGraph workflow | [`src/azmulti/graph.py`](src/azmulti/graph.py), [`src/azmulti/agents/`](src/azmulti/agents) |
 | Method 1 - MiniLM embeddings | [`src/azmulti/embeddings.py`](src/azmulti/embeddings.py), [`src/azmulti/catalog.py`](src/azmulti/catalog.py) |
 | Method 2 - GPT-4o prompts and personas | [`src/azmulti/prompts.py`](src/azmulti/prompts.py), [`src/azmulti/state.py`](src/azmulti/state.py) |
 | Method 3 - RAG over real reviews | [`src/azmulti/reviews_index.py`](src/azmulti/reviews_index.py), [`src/azmulti/agents/concierge.py`](src/azmulti/agents/concierge.py) |
@@ -35,7 +35,7 @@ methods from our midterm milestone.
 ## The agents
 
 ```
- user ──> PLANNER ──┬─ new plan / edit / revise ──> WEATHER & EVENTS ──> ATTRACTION ──> DINING & NIGHTLIFE ──> LIVE INFO ──> ROUTE ──> BUDGET ──> CRITIC ─┬─> BOOKING ──> CONCIERGE ──> answer
+ user ──> PLANNER ──┬─ new plan / edit / revise ──> WEATHER & EVENTS ──> ATTRACTION ──> DINING & NIGHTLIFE ──> LIVE INFO ──> ROUTE ──> CAR RENTAL ──> BUDGET ──> CRITIC ─┬─> BOOKING ──> CONCIERGE ──> answer
  (GPT-4o            │                                                       ^                                                              │
   structured        │                                                       └──────────────── repair (≤ 2 replans) <──────────────────────┘
   output +          ├─ tools ──> CONCIERGE TOOLS (options, compare, nearby, add/remove, book+approve, favorites, memory, vote, ...) ──> answer
@@ -45,6 +45,7 @@ methods from our midterm milestone.
 
 | Agent | Job | GenAI method |
 |---|---|---|
+| **Car Rental** (`agents/rental_agent.py`) | When the traveler needs a rental car ("we need a rental car", or *Rental car* under Getting around): picks the pickup (nearest airport, e.g. PHX, TUS, FLG, or a rental office from the place data), how many cars and what size (economy / midsize / SUV / minivan, from the group, kids, trailheads and distance), the days and an estimated cost (labelled as an estimate). The Budget agent adds it per person; the Checklist gets "Book a rental car" two weeks ahead with a Kayak search pre-filled with the airport and dates. Nothing is booked. | 4 |
 | **Weather & Events** (`agents/weather_agent.py`) | Live Open-Meteo forecast (≤ 14 days) or climate normals, heat/rain/cold alerts, sunrise/sunset (NOAA equations), recurring local events; builds the day skeleton around them. | 4 (tool) |
 | **Live Info** (`agents/live_agent.py`) | Checks every chosen stop with Google Places: current hours, closures (replaced automatically), price, website, parking. Live events (Ticketmaster), traffic (TomTom) and web lookups (Tavily) plug into the other agents. | 3 (live retrieval), 4 |
 | **Concierge tools** (`agents/tools.py`) | Everything conversational after a plan: budget/balanced/premium options, compare, alternatives, nearby, add/remove stops, booking with approval + reservation list, favorites, feedback learning, memory, events, weather, share, cost split, budget reallocation, transport mode, group vote. | 2, 3, 4 |

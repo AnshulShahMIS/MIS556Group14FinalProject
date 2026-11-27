@@ -73,6 +73,16 @@ def build(st: dict) -> list[dict]:
                           "text": f"Check opening hours for {p['name']}",
                           "why": f"Our data isn't sure it's open {when} at {(s.get('time') or '').split(' - ')[0]}.",
                           "due": due(day, 1), "link": link, "link_label": label, "place_id": p["id"]})
+    rc = st.get("rental")  # the Car Rental agent's decision: book it two weeks ahead
+    if rc:
+        where = f"at {rc['airport']} airport" if rc.get("airport") else f"in {rc['pickup_city']}"
+        items.append({"id": _id("car", start, rc["pickup_city"]), "kind": "car",
+                      "text": f"Book a rental car ({rc['cars']} {rc['size']}{'s' if rc['cars'] > 1 else ''})",
+                      "why": f"{rc['days']} day{'s' if rc['days'] > 1 else ''}, pick up {where}"
+                             + (f" on {d0:%a, %b} {d0.day}" if d0 else "")
+                             + f", about ${rc['total']:.0f} before gas. Fits {rc['fits']}. Prices go up closer to the date. "
+                             + " ".join(rc.get("notes") or []),
+                      "due": due(1, 14), "link": rc["link"], "link_label": "Kayak (compare companies)"})
     for it in items:  # already booked in the app: done
         it["auto_done"] = it.get("place_id") in booked or (it["kind"] in ("hotel", "table", "tickets")
                                                              and (requested.get(it.get("place_id")) or {}).get("status") == "booked")
@@ -93,6 +103,22 @@ def build(st: dict) -> list[dict]:
                              "and turn back by mid-morning.",
                       "due": due(1, 1), "link": None, "link_label": None, "auto_done": False})
     return items
+
+
+# the airport to pick a rental car up from, for each city (rentals are cheapest and easiest there)
+AIRPORTS = {"Phoenix": "PHX", "Scottsdale": "PHX", "Tempe": "PHX", "Mesa": "PHX", "Chandler": "PHX", "Gilbert": "PHX",
+            "Glendale": "PHX", "Peoria": "PHX", "Paradise Valley": "PHX", "Sedona": "PHX", "Prescott": "PRC",
+            "Tucson": "TUS", "Flagstaff": "FLG", "Grand Canyon Village": "FLG", "Page": "PGA", "Yuma": "YUM",
+            "Lake Havasu City": "IFP"}
+
+
+def rental_link(city: str, start: date | None, days: int) -> str:
+    """A Kayak car search for the nearest airport (or the city) and the trip's dates."""
+    from urllib.parse import quote
+    loc = AIRPORTS.get(city) or quote(f"{city},AZ")
+    if not start:
+        return f"https://www.kayak.com/cars/{loc}"
+    return f"https://www.kayak.com/cars/{loc}/{start.isoformat()}/{(start + timedelta(days=max(1, days) - 1)).isoformat()}"
 
 
 def with_status(items: list[dict], done: list[str] | set[str]) -> list[dict]:

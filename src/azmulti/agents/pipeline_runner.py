@@ -7,6 +7,7 @@ from .concierge import booking_node, concierge_node
 from .critic import critic_node, repair_node
 from .live_agent import live_node
 from .logistics import budget_node, route_node
+from .rental_agent import rental_node
 from .specialists import attraction_node, dining_node, lodging_node
 
 
@@ -14,7 +15,8 @@ def run_pipeline(state: dict, write: bool = True, refill: bool = True) -> dict:
     st = dict(state)
     st["replans"] = 0
     st["repaired"] = []
-    steps = [attraction_node, dining_node, lodging_node, live_node, route_node, budget_node] if refill else [live_node, route_node, budget_node]
+    steps = ([attraction_node, dining_node, lodging_node, live_node, route_node, rental_node, budget_node] if refill
+             else [live_node, route_node, rental_node, budget_node])
     for node in steps:
         st.update(node(st))
     for _ in range(MAX_REPLANS + 1):
@@ -22,7 +24,7 @@ def run_pipeline(state: dict, write: bool = True, refill: bool = True) -> dict:
         if not st.get("needs_repair"):
             break
         st.update(repair_node(st))
-        for node in (attraction_node, dining_node, lodging_node, live_node, route_node, budget_node):
+        for node in (attraction_node, dining_node, lodging_node, live_node, route_node, rental_node, budget_node):
             st.update(node(st))
     st.update(booking_node(st))
     if write:
