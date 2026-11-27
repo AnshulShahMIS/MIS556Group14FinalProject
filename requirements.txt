@@ -27,6 +27,7 @@ streamlit==1.67.0
 pydeck==0.9.3
 python-dotenv==1.2.4
 requests==2.34.2
+fpdf2==2.9.0   # the itinerary PDF
 
 # Tests and evaluation (not needed by the running app)
 pytest>=8

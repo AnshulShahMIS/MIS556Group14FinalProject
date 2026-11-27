@@ -120,7 +120,7 @@ Plan / Map / My trips / Group pages appear once you're signed in). **Create acco
 **Sign out**, **Change password** and **Delete my account**; preferences, favorites and trips belong to the account, on
 any device. There's no password reset, so the sign-up form asks people to keep their password safe.
 
-**Confirm trip** (on the trip card) marks the trip **Confirmed** in My trips and offers the itinerary page (day by day,
+**Confirm trip** (on the trip card) marks the trip **Confirmed** in My trips and offers the itinerary as a PDF (day by day,
 with times, places, links, costs, the budget and the Google Maps route) and a calendar file to download. If the trip
 changes afterwards, the button becomes **Confirm changes**.
 

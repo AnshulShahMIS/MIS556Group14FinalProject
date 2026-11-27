@@ -780,7 +780,7 @@ def confirm_dialog():
     b = st_.get("budget") or {}
     if b.get("total_pp") is not None:
         st.caption(f"About ${b['total_pp']:.0f} per person")
-    st.caption("Confirming marks the trip as confirmed in My trips and gives you the itinerary page and calendar file "
+    st.caption("Confirming marks the trip as confirmed in My trips and gives you the itinerary as a PDF and the calendar file "
                "to keep. Nothing is booked or paid - reservations are made on the booking sites (see the Checklist).")
     if not ss.get("_confirmed_now") and st.button("Confirm trip", icon=":material/task_alt:", type="primary",
                                                    use_container_width=True):
@@ -792,12 +792,11 @@ def confirm_dialog():
         st.rerun(scope="fragment")  # redraw the window without the button
     if ss.get("_confirmed_now"):
         st.success("Trip confirmed. Keep a copy:", icon=I["check"])
-        _, _, html, files = confirm.build(st_, (ss.planner.account or {}).get("username", ""))
-        page = ("<!doctype html><html><head><meta charset='utf-8'><title>" + esc(title) + " - Saguaro itinerary</title>"
-                "<meta http-equiv='Content-Security-Policy' content=\"default-src 'none'; style-src 'unsafe-inline'\">"
-                "</head><body style='background:#f3ede6;padding:20px'>" + html + "</body></html>")
+        from azmulti.pdfdoc import itinerary_pdf
+        _, _, _, files = confirm.build(st_, (ss.planner.account or {}).get("username", ""))
+        pdf = itinerary_pdf(st_, (ss.planner.account or {}).get("username", ""), ss.planner.checklist())
         c1, c2 = st.columns(2)
-        c1.download_button("Itinerary page", page, file_name="saguaro-itinerary.html", mime="text/html",
+        c1.download_button("Itinerary (PDF)", pdf, file_name="saguaro-itinerary.pdf", mime="application/pdf",
                            icon=I["download"], use_container_width=True)
         for name, mime, data in files:
             c2.download_button("Calendar file", data, file_name=name, mime=mime, icon=I["calendar"],
@@ -1597,17 +1596,10 @@ def trip_details(st_: dict, req: dict, b: dict, stops: list, day_txt: str):
     if bk.get("ics"):
         c[0].download_button("Add to my calendar", bk["ics"], file_name="arizona_itinerary.ics", mime="text/calendar",
                              icon=I["calendar"], use_container_width=True)
-    page = ("<!doctype html><html><head><meta charset='utf-8'>"
-            "<meta http-equiv='Content-Security-Policy' content=\"default-src 'none'; style-src 'unsafe-inline'\">"
-            "<title>Arizona itinerary</title><style>body{font-family:system-ui;max-width:760px;margin:2em auto;line-height:1.5;color:#1f2328}"
-            "li{margin:.6em 0}</style></head><body><h2>Our Arizona plan - " + esc(req.get("city")) + " · " + esc(day_txt) + "</h2><ol>"
-            + "".join(f"<li><b>{esc(s.get('time'))} - <a href='{esc(safe_url(p_.get('url')) or '#')}' rel='noopener noreferrer'>{esc(p_['name'])}</a></b> ({esc(p_['city'])}) · "
-                      f"{(p_['rating'] or 0):.1f}/5 · ~${s.get('cost_pp') or 0:.0f} per person<br><small>{esc(s.get('reason'))}</small></li>"
-                      for s in stops for p_ in [s["place"]])
-            + f"</ol><p>Estimated ${b.get('total_pp', 0):.0f} per person. "
-            + (f"<a href='{esc(safe_url(bk.get('route_url')))}' rel='noopener noreferrer'>Open the route in Google Maps</a>" if safe_url(bk.get("route_url")) else "")
-            + "</p><p><small>Planned with Saguaro (MIS 556). Verify hours and prices before you go.</small></p></body></html>")
-    c[1].download_button("Save as a page", page, file_name="arizona_itinerary.html", mime="text/html", icon=I["download"], use_container_width=True)
+    from azmulti.pdfdoc import itinerary_pdf
+    pdf = itinerary_pdf(st_, (ss.planner.account or {}).get("username", ""), ss.planner.checklist())
+    c[1].download_button("Save as PDF", pdf, file_name="arizona_itinerary.pdf", mime="application/pdf", icon=I["download"],
+                         use_container_width=True)
     if safe_url(bk.get("route_url")):
         c[2].link_button("Route in Google Maps", safe_url(bk["route_url"]), icon=I["route"], use_container_width=True)
     st.caption("Hours and prices come from Google Maps (2021) and TripAdvisor unless marked as checked live. Please verify before you go.")
