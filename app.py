@@ -678,6 +678,7 @@ def confirm_dialog():
             st.error(msg)
             return
         ss["_confirmed_now"] = True
+        st.rerun(scope="fragment")  # redraw the window without the button
     if ss.get("_confirmed_now"):
         st.success("Trip confirmed. Keep a copy:", icon=I["check"])
         _, _, html, files = confirm.build(st_, (ss.planner.account or {}).get("username", ""))
