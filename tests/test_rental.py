@@ -42,6 +42,7 @@ def test_rental_runs_as_an_agent_in_the_plan():
     st = p.state()
     rc = st["rental"]
     assert rc and rc["airport"] == "TUS" and rc["cars"] == 1
+    assert st["request"]["days"] == 3 and rc["days"] == 3 and rc["return_date"] == "2027-03-14"  # "3 days in Tucson"
     assert any(t["agent"] == "Car Rental" for t in st["trace"])
     line = next(l for l in st["budget"]["lines"] if l["category"] == "rental car")
     assert line["per_person"] == rc["per_person"] and st["budget"]["rental_pp"] == rc["per_person"]
@@ -59,3 +60,11 @@ def test_switch_rental_on_and_off_in_chat():
     p.ask("actually we have our own car")
     assert not p.state().get("rental") and p.state()["budget"]["rental_pp"] == 0
     assert not any(i["kind"] == "car" for i in p.checklist())
+
+
+def test_single_city_day_count():
+    from azmulti.agents.planner import parse_request_rules
+    assert parse_request_rules("3 days in Tucson for 4 people").days == 3
+    assert parse_request_rules("2 days at the Grand Canyon").days == 2
+    assert parse_request_rules("3 days in Phoenix, then 2 days in Sedona").days == 5  # multi-city unchanged
+    assert parse_request_rules("Saturday in Sedona for 2").days == 1

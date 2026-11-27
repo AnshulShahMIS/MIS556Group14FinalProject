@@ -294,6 +294,10 @@ def parse_request_rules(text: str) -> TripRequest:
         r.legs, r.city, r.days = legs, legs[0]["city"], sum(lg["days"] for lg in legs)
         r.need_hotel = True  # moving between cities means nights away
     else:  # "day trip to Sedona from Phoenix": plan where they're going, not where they start
+        # one city: "3 days in Tucson" counts as the trip length (the skip above was for multi-city legs)
+        m_in = re.search(r"\b(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)[- ]days?\s+(?:in|at)\b", t)
+        if m_in and r.days == 1:
+            r.days = max(1, min(MAX_DAYS, _num(m_in.group(1)) or 1))
         named = cities_in_order(text)
         dest = [c for pos, c in named if not re.search(r"\b(from|leaving|starting in|based in)\s+(the\s+)?$", t[max(0, pos - 20):pos])]
         if len(named) >= 2 and dest:
