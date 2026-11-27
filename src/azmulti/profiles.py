@@ -65,13 +65,7 @@ def save_trips(account_id: str | None, trips: list[dict]) -> None:
     if not account_id:
         return
     store = get_store()
-    saved = [t for t in (store.get(_key(account_id, "trips")) or []) if isinstance(t, dict)]
-    before = {t.get("id") for t in saved}
-    # reminders already emailed are recorded by the daily reminder job (scripts/send_reminders.py): keep its record
-    sent = {t.get("id"): set(t.get("reminded") or []) for t in saved}
-    for t in trips:
-        if sent.get(t["id"]):
-            t["reminded"] = sorted(set(t.get("reminded") or []) | sent[t["id"]])
+    before = {t.get("id") for t in (store.get(_key(account_id, "trips")) or []) if isinstance(t, dict)}
     for t in trips:
         if t.get("state") is not None:
             store.put(_trip_key(account_id, t["id"]), t["state"])

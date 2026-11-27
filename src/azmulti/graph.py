@@ -228,7 +228,7 @@ class Planner:
     def sign_in(self, account: dict) -> None:
         """Use this account's saved preferences and trips from now on. Trips planned before signing in, in
         this visit, are added to the account; preferences learned this visit are merged in."""
-        self.account = {k: account.get(k) for k in ("id", "username", "email", "name")}
+        self.account = {"id": account["id"], "username": account["username"]}
         saved = load_profile(self._aid)
         for k in ("cuisines", "interests", "liked_categories", "disliked_categories"):
             for item, n in (self.profile.get(k) or {}).items():
@@ -268,7 +268,7 @@ class Planner:
     TRIP_KEYS = ("request", "slots", "conditions", "budget", "quality", "route", "issues", "booking", "answer",
                  "events", "reservations", "notes", "options")
     MAX_TRIPS = 20
-    KEEP_ON_SAVE = ("confirmed_at", "confirmed_sig", "checklist_done", "reminders", "reminded")
+    KEEP_ON_SAVE = ("confirmed_at", "confirmed_sig", "checklist_done")
 
     def save_trip(self, state: dict | None = None) -> str | None:
         """Save (or update) a plan in My trips. Returns its trip id."""
@@ -319,19 +319,17 @@ class Planner:
             return None
         return {"at": rec["confirmed_at"], "changed": rec.get("confirmed_sig") != self._plan_sig(self.state())}
 
-    # ---------------- pre-trip checklist (checklist.py) and reminders (scripts/send_reminders.py)
+    # ---------------- pre-trip checklist (checklist.py) and trip confirmation
     def _current_rec(self) -> dict | None:
         if not self.trip_id:
             self.save_trip()
         return next((t for t in self.trips if t["id"] == self.trip_id), None)
 
-    def checklist(self) -> tuple[list[dict], bool]:
-        """The current trip's checklist (items with "done"), and whether email reminders are on."""
+    def checklist(self) -> list[dict]:
+        """The current trip's checklist: items with "done" (ticked off, or booked in the app)."""
         from . import checklist
         rec = self._current_rec()
-        if not rec:
-            return [], False
-        return checklist.with_status(rec.get("checklist") or [], rec.get("checklist_done")), bool(rec.get("reminders"))
+        return checklist.with_status(rec.get("checklist") or [], rec.get("checklist_done")) if rec else []
 
     def set_check(self, item_id: str, done: bool) -> None:
         rec = self._current_rec()
@@ -341,46 +339,19 @@ class Planner:
             rec["checklist_done"] = sorted(ticks)
             save_trips(self._aid, self.trips)
 
-    def set_reminders(self, on: bool) -> None:
-        rec = self._current_rec()
-        if rec:
-            rec["reminders"] = bool(on and self.account)
-            save_trips(self._aid, self.trips)
-
-    def email_checklist(self) -> tuple[bool, str]:
-        from . import checklist, mailer
-        if not self.account or not self.account.get("email"):
-            return False, "Sign in to get the checklist by email."
-        items, _ = self.checklist()
-        todo = [i for i in items if not i["done"]]
-        if not todo:
-            return False, "Nothing left to do - everything on the checklist is ticked off."
-        rec = self._current_rec()
-        subject, text, html = checklist.email(rec, todo, self.account.get("name") or "", checklist.today_in_arizona())
-        return mailer.send(self.account["email"], subject, text, html)
-
-    def confirm_trip(self, remind: bool = False) -> tuple[bool, str]:
-        """Email the current trip's itinerary to the signed-in account and mark the trip confirmed (and, if asked,
-        turn on email reminders for its checklist)."""
+    def confirm_trip(self) -> tuple[bool, str]:
+        """Mark the current trip confirmed (saved to the account). The app then offers the itinerary page and the
+        calendar file to download (confirm.py)."""
         from datetime import datetime as _dt
-        from . import confirm, mailer
-        if not self.account or not self.account.get("email"):
-            return False, "Sign in to confirm a trip - the confirmation goes to your account's email."
         st = self.state()
         if not any(s.get("place") for s in st.get("slots") or []):
             return False, "There's no trip to confirm yet."
-        subject, text, html, files = confirm.build(st, self.account.get("name") or "")
-        ok, msg = mailer.send(self.account["email"], subject, text, html, files)
-        if not ok:
-            return False, msg
         tid = self.save_trip()
         rec = next(t for t in self.trips if t["id"] == tid)
         rec["confirmed_at"] = _dt.now().isoformat(timespec="minutes")
         rec["confirmed_sig"] = self._plan_sig(st)
-        if remind:
-            rec["reminders"] = True
         save_trips(self._aid, self.trips)
-        return True, msg
+        return True, "Trip confirmed."
 
     def open_trip(self, trip_id: str) -> bool:
         """Make a saved trip the current plan again (the current one stays saved)."""

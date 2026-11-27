@@ -111,35 +111,31 @@ The header shows which AI is planning (**AI Built In Planner**, or GPT-4o with a
 Light mode**, **OpenAI key** (use your own key for this session), **Preferences** (what Saguaro remembers, favorites,
 live-data status, about), **New trip** and the account menu.
 
-### Accounts and trip confirmations
+### Accounts, trip confirmation and the checklist
 
 Saguaro needs an account: signed out, every address shows a **sign-in page** (a short intro and the forms; the
-Plan / Map / My trips / Group pages appear once you're signed in). **Create account** asks for an email, a password and (optionally) a first
-name, then emails a **6-digit code**; the account is created once the code is entered, so nobody can sign up with
-someone else's address. **Keep me signed in** remembers the browser for 30 days, and **Forgot your password?** emails a
-code to set a new one. Once signed in, the name in the header opens **Sign out**, **Change password** and **Delete my
-account**; preferences, favorites and trips belong to the account, on any device.
+Plan / Map / My trips / Group pages appear once you're signed in). **Create account** asks for a username and a password
+(no email); **Keep me signed in** remembers the browser for 30 days. Once signed in, the name in the header opens
+**Sign out**, **Change password** and **Delete my account**; preferences, favorites and trips belong to the account, on
+any device. There's no password reset, so the sign-up form asks people to keep their password safe.
 
-**Confirm trip** (on the trip card) emails the whole itinerary - day by day, with times, places, links and costs, the
-budget and the Google Maps route - plus a calendar file, to the account's email, and marks the trip **Confirmed** in
-My trips. If the trip changes afterwards, the button becomes **Send update**.
+**Confirm trip** (on the trip card) marks the trip **Confirmed** in My trips and offers the itinerary page (day by day,
+with times, places, links, costs, the budget and the Google Maps route) and a calendar file to download. If the trip
+changes afterwards, the button becomes **Confirm changes**.
 
 **Checklist** (first tab under the trip) lists what to book or check before going, built from the plan and the place
 data: hotels to book (3 weeks ahead), tables where reservations are recommended (a week ahead) or taken (2 days),
 tickets for paid attractions (3 days), opening hours our data isn't sure about (the day before), the forecast, and
 heat advice for summer hikes. Each item has a "do it by" date and a link to the booking site; ticks are saved with the
-trip, and items tick themselves when a reservation is marked booked. **Email me this checklist** sends it now, and
-**Email me reminders** (also offered when confirming a trip) emails the items on the days they come due - a daily
-GitHub Action (`.github/workflows/reminders.yml`, `scripts/send_reminders.py`) at 8 am Arizona time, each item once.
+trip, and items tick themselves when a reservation is marked booked.
 
-- Passwords and codes are never stored: only salted hashes (PBKDF2-SHA256, 200,000 rounds for passwords). Wrong
-  passwords get the same message whether or not the email has an account; 5 misses lock it for 5 minutes; a code
-  allows 5 tries and lasts 15 minutes.
+- Passwords are never stored: only a salted PBKDF2-SHA256 hash (200,000 rounds). Wrong passwords get the same message
+  whether or not the username exists; 5 misses lock it for 5 minutes.
 - Accounts, preferences and trips are JSON files in a **private GitHub repository** (secrets `AZ_STORE_REPO`,
-  `AZ_STORE_TOKEN`); emails go through Gmail (secrets `AZ_SMTP_USER`, `AZ_SMTP_PASSWORD`) - see DEPLOY.md. Without
-  them, accounts are local files under `data/accounts/` and emails are saved to `data/outbox/` (both not committed),
-  and the sign-up window shows the code on screen.
-- Code: `src/azmulti/accounts.py`, `mailer.py`, `confirm.py`, `checklist.py`, `store.py`, `profiles.py`, `scripts/send_reminders.py`; tests: `tests/test_accounts.py`, `test_checklist.py`, `test_store.py`.
+  `AZ_STORE_TOKEN`, see DEPLOY.md), so they survive app updates; without them they're local files under
+  `data/accounts/` (not committed).
+- Code: `src/azmulti/accounts.py`, `confirm.py`, `checklist.py`, `store.py`, `profiles.py`; tests:
+  `tests/test_accounts.py`, `test_checklist.py`, `test_store.py`.
 
 The previous design is saved as the git tag `v1-classic-ui` (`git checkout v1-classic-ui -- app.py .streamlit/config.toml`
 brings it back).

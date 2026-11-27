@@ -2,8 +2,7 @@
 and the place data (reservations accepted / recommended, ticket prices, opening hours, the forecast).
 
 Item: {"id", "kind", "text", "why", "due" (YYYY-MM-DD or None when the trip has no date), "link", "link_label"}.
-Items are rebuilt whenever the plan changes; which ones are ticked off (and which were already emailed as reminders)
-is kept with the saved trip by id, so a tick survives changes elsewhere in the plan.
+Items are rebuilt whenever the plan changes; which ones are ticked off is kept with the saved trip by id, so a tick survives changes elsewhere in the plan.
 """
 from __future__ import annotations
 
@@ -101,13 +100,6 @@ def with_status(items: list[dict], done: list[str] | set[str]) -> list[dict]:
     return [{**it, "done": bool(it.get("auto_done") or it["id"] in done)} for it in items]
 
 
-def due_for_reminder(items: list[dict], done, reminded, today: date) -> list[dict]:
-    """Items not done, due by today, not emailed yet."""
-    done, reminded = set(done or []), set(reminded or [])
-    return [it for it in items if it.get("due") and date.fromisoformat(it["due"]) <= today
-            and not it.get("auto_done") and it["id"] not in done and it["id"] not in reminded]
-
-
 def fmt_due(due: str | None, today: date | None = None) -> str:
     if not due:
         return ""
@@ -115,49 +107,6 @@ def fmt_due(due: str | None, today: date | None = None) -> str:
     n = (d - today).days
     return ("overdue - do it now" if n < 0 else "do it today" if n == 0 else "do it by tomorrow" if n == 1
             else f"do it by {d:%a, %b} {d.day}")
-
-
-def email(trip: dict, items: list[dict], name: str = "", today: date | None = None,
-          reminder: bool = False) -> tuple[str, str, str]:
-    """(subject, text, html) for the checklist (all open items) or a reminder (the items now due)."""
-    from html import escape
-    today = today or date.today()
-    title = trip.get("city") or "your trip"
-    when = trip.get("when") or ""
-    start = trip.get("start")
-    days_to_go = (date.fromisoformat(str(start)[:10]) - today).days if start else None
-    lead = (f"Your {title} trip is {'tomorrow' if days_to_go == 1 else f'in {days_to_go} days' if days_to_go else 'coming up'}."
-            if reminder else f"Here's your checklist for {title}" + (f" ({when})." if when else "."))
-    subject = (f"Reminder: {len(items)} thing{'s' if len(items) != 1 else ''} to do before your {title} trip" if reminder
-               else f"Your checklist for {title}")
-    lines = [f"Hi{' ' + name if name else ''},", "", lead, ""]
-    rows = []
-    for it in items:
-        due = fmt_due(it.get("due"), today)
-        lines.append(f"[ ] {it['text']}" + (f" - {due}" if due else ""))
-        lines.append(f"    {it['why']}")
-        if it.get("link"):
-            lines.append(f"    {it.get('link_label') or 'Link'}: {it['link']}")
-        rows.append("<tr><td style='padding:8px 10px 8px 0;vertical-align:top;font-size:18px'>&#9744;</td><td style='padding:8px 0'>"
-                    f"<b>{escape(it['text'])}</b>" + (f" <span style='color:#B4532A;font-size:13px'>{escape(due)}</span>" if due else "")
-                    + f"<br><span style='color:#6E6259;font-size:13px'>{escape(it['why'])}</span>"
-                    + (f"<br><a href='{escape(it['link'])}' style='color:#8A3E1F;font-size:13px'>{escape(it.get('link_label') or 'Open')}</a>"
-                       if it.get("link") else "") + "</td></tr>")
-    lines += ["", "Tick items off in the Checklist tab of your trip in Saguaro.",
-              "You get these reminders because you turned them on for this trip; turn them off in the Checklist tab."
-              if reminder else ""]
-    html = ("<div style='font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#2A2420;max-width:600px;margin:0 auto'>"
-            "<div style='background:#B4532A;color:#fff;padding:16px 20px;border-radius:12px 12px 0 0'>"
-            f"<div style='font-size:13px;opacity:.9'>{'Trip reminder' if reminder else 'Trip checklist'}</div>"
-            f"<div style='font-family:Georgia,serif;font-size:24px;font-weight:700'>{escape(title)}</div>"
-            f"<div style='font-size:14px'>{escape(when)}</div></div>"
-            "<div style='border:1px solid #EADFD3;border-top:0;border-radius:0 0 12px 12px;padding:8px 20px 18px;background:#FBF7F2'>"
-            f"<p>Hi{' ' + escape(name) if name else ''}, {escape(lead[0].lower() + lead[1:])}</p>"
-            f"<table style='width:100%;border-collapse:collapse;font-size:14px'>{''.join(rows)}</table>"
-            "<p style='color:#6E6259;font-size:12px;margin-top:14px'>Tick items off in the Checklist tab of your trip in Saguaro."
-            + (" You get these reminders because you turned them on for this trip; turn them off in the Checklist tab."
-               if reminder else "") + "</p></div></div>")
-    return subject, "\n".join(x for x in lines if x is not None), html
 
 
 def today_in_arizona() -> date:

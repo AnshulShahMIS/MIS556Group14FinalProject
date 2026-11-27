@@ -82,31 +82,6 @@ AZ_STORE_TOKEN = "github_pat_..."
 The token never appears in the code, logs or the app. Without these two secrets the app still works, but accounts are
 kept only until the next update.
 
-### Email (sign-up codes and trip confirmations)
-
-Saguaro sends email through a Gmail account:
-
-1. Use (or create) the Gmail account the emails should come from. Turn on **2-Step Verification**
-   (Google Account → Security).
-2. Google Account → Security → **App passwords** → create one named "Saguaro". Google shows a 16-letter password once.
-3. In the Streamlit app's **Settings → Secrets**, add:
-
-```toml
-AZ_SMTP_USER = "your.address@gmail.com"
-AZ_SMTP_PASSWORD = "the 16-letter app password"
-```
-
-The app password only lets Saguaro send mail; it is never shown or logged, and you can revoke it any time in the same
-Google page. Without these secrets the app still works: sign-up shows the code on screen and nothing is emailed.
-
-### Trip reminders (daily GitHub Action)
-
-The app sleeps when nobody is using it, so checklist reminders are sent by a GitHub Action in this repository
-(`.github/workflows/reminders.yml`, every day at 8 am Arizona time). It needs the same four values as the app, saved as
-**Actions secrets** in this repository (GitHub → this repo → Settings → Secrets and variables → Actions → New repository
-secret): `AZ_STORE_REPO`, `AZ_STORE_TOKEN`, `AZ_SMTP_USER`, `AZ_SMTP_PASSWORD`. Until they're added the Action runs and
-does nothing. To try it straight away: Actions tab → Trip reminders → Run workflow.
-
 ## 3. Updating the app later
 
 Change the code, then:

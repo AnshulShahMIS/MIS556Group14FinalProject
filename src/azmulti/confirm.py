@@ -1,5 +1,5 @@
-"""The trip confirmation email: the whole itinerary (day by day, with times, places, links and costs), the budget,
-reservations and the route, plus a calendar file (.ics) the traveler can add to their calendar."""
+"""The confirmed trip's itinerary page: the whole trip (day by day, with times, places, links and costs), the budget,
+reservations and the route, plus the calendar file (.ics) - both offered as downloads after Confirm trip."""
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -22,7 +22,7 @@ def _trip_title(st: dict) -> tuple[str, str]:
 
 
 def build(st: dict, name: str = "") -> tuple[str, str, str, list[tuple[str, str, bytes]]]:
-    """(subject, plain text, html, attachments) for a confirmed trip."""
+    """(title, plain text, html page, attachments) for a confirmed trip."""
     req, b, bk = st.get("request") or {}, st.get("budget") or {}, st.get("booking") or {}
     title, when = _trip_title(st)
     party = req.get("party_size", 2)
@@ -68,8 +68,8 @@ def build(st: dict, name: str = "") -> tuple[str, str, str, list[tuple[str, str,
             f"<div style='font-size:14px;opacity:.95'>{escape(when)}{' · ' if when else ''}{party} "
             f"{'travelers' if party > 1 else 'traveler'}</div></div>"
             "<div style='border:1px solid #EADFD3;border-top:0;border-radius:0 0 12px 12px;padding:6px 22px 20px;background:#FBF7F2'>"
-            f"<p>Hi{' ' + escape(name) if name else ''}, here's your itinerary. The attached calendar file adds every stop "
-            "to your calendar.</p>"
+            f"<p>Hi{' ' + escape(name) if name else ''}, here's your itinerary. The calendar file (download it in Saguaro) adds "
+            "every stop to your calendar.</p>"
             f"<table style='width:100%;border-collapse:collapse;font-size:14px'>{''.join(rows)}</table>"
             + (f"<p style='margin-top:16px'><b>{escape(total)}</b></p>" if total else "")
             + (f"<p><a href='{escape(route)}' style='color:#8A3E1F'>Open the route in Google Maps</a></p>" if route else "")
