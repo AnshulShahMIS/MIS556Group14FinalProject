@@ -68,3 +68,16 @@ def test_single_city_day_count():
     assert parse_request_rules("2 days at the Grand Canyon").days == 2
     assert parse_request_rules("3 days in Phoenix, then 2 days in Sedona").days == 5  # multi-city unchanged
     assert parse_request_rules("Saturday in Sedona for 2").days == 1
+
+
+def test_hotels_and_the_car_come_first_on_the_checklist():
+    from azmulti.checklist import order
+    p = Planner()
+    p.ask("5 days in Phoenix then 5 days in Mesa starting 2026-12-21 for 2 people, food and hiking, we need a rental car")
+    kinds = [i["kind"] for i in p.checklist()]
+    n = kinds.count("hotel") + kinds.count("car")
+    assert n >= 2 and set(kinds[:n]) <= {"hotel", "car"} and "car" in kinds[:n]
+    items = [{"kind": "table", "due": "2026-12-01"}, {"kind": "car", "due": "2026-12-07"},
+             {"kind": "hotel", "due": "2026-12-05", "done": True}, {"kind": "hotel", "due": "2026-11-30"}]
+    assert [(i["kind"], i.get("done", False)) for i in order(items)] == [("hotel", False), ("car", False), ("table", False),
+                                                                        ("hotel", True)]

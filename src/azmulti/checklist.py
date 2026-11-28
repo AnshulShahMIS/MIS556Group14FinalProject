@@ -121,9 +121,17 @@ def rental_link(city: str, start: date | None, days: int) -> str:
     return f"https://www.kayak.com/cars/{loc}/{start.isoformat()}/{(start + timedelta(days=max(1, days) - 1)).isoformat()}"
 
 
+FIRST = ("hotel", "car")  # where you'll stay and the rental car always come first: they sell out and set the trip
+
+
+def order(items: list[dict]) -> list[dict]:
+    """To-dos before done ones; within each, hotels and the rental car first, then by 'do it by' date."""
+    return sorted(items, key=lambda i: (bool(i.get("done")), i.get("kind") not in FIRST, i.get("due") or "9999"))
+
+
 def with_status(items: list[dict], done: list[str] | set[str]) -> list[dict]:
     done = set(done or [])
-    return [{**it, "done": bool(it.get("auto_done") or it["id"] in done)} for it in items]
+    return order([{**it, "done": bool(it.get("auto_done") or it["id"] in done)} for it in items])
 
 
 def fmt_due(due: str | None, today: date | None = None) -> str:

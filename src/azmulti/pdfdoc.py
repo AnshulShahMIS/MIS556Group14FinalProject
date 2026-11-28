@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 
 from fpdf import FPDF
 
+from .checklist import order
 from .security import safe_url
 
 CLAY, INK, MUTED, LINE, CREAM = (180, 83, 42), (42, 36, 32), (110, 98, 89), (234, 223, 211), (251, 247, 242)
@@ -183,7 +184,7 @@ def itinerary_pdf(st: dict, name: str = "", checklist: list[dict] | None = None)
     todo = [i for i in checklist or [] if not i.get("done")]
     if todo:
         _heading(pdf, "Before you go")
-        for it in sorted(todo, key=lambda i: i.get("due") or "9999"):
+        for it in order(todo):
             if pdf.get_y() > pdf.h - 30:
                 pdf.add_page()
             due = ""

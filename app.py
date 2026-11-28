@@ -1510,7 +1510,7 @@ def checklist_tab():
     st.caption(f"{left} of {len(items)} still to do. Built from your plan: places that take or recommend reservations, "
                "paid attractions, hours to double-check and the weather. Ticks are saved with your trip.")
     today = CL.today_in_arizona()
-    for it in sorted(items, key=lambda i: (i["done"], i.get("due") or "9999")):
+    for it in CL.order(items):
         with card():
             c = st.columns([0.5, 6, 1.6], vertical_alignment="center")
             key = f"chk-{it['id']}"
