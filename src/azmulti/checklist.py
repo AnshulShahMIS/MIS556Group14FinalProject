@@ -129,6 +129,28 @@ def order(items: list[dict]) -> list[dict]:
     return sorted(items, key=lambda i: (bool(i.get("done")), i.get("kind") not in FIRST, i.get("due") or "9999"))
 
 
+# the checklist's groups, in the order they're shown: (title, material icon, kinds)
+GROUPS = (("Where you'll stay", "hotel", ("hotel",)),
+          ("Getting around", "directions_car", ("car",)),
+          ("Tickets", "confirmation_number", ("tickets",)),
+          ("Restaurant reservations", "restaurant", ("table",)),
+          ("Check before you go", "fact_check", ("hours", "weather", "heat")))
+
+
+def grouped(items: list[dict]) -> list[tuple[str, str, list[dict]]]:
+    """(title, icon, items) for each group that has items; each group ordered like order()."""
+    out, seen = [], set()
+    for title, icon, kinds in GROUPS:
+        its = [i for i in items if i.get("kind") in kinds]
+        seen.update(id(i) for i in its)
+        if its:
+            out.append((title, icon, order(its)))
+    rest = [i for i in items if id(i) not in seen]
+    if rest:
+        out.append(("Other", "checklist", order(rest)))
+    return out
+
+
 def with_status(items: list[dict], done: list[str] | set[str]) -> list[dict]:
     done = set(done or [])
     return order([{**it, "done": bool(it.get("auto_done") or it["id"] in done)} for it in items])

@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 
 from fpdf import FPDF
 
-from .checklist import order
+from .checklist import grouped
 from .security import safe_url
 
 CLAY, INK, MUTED, LINE, CREAM = (180, 83, 42), (42, 36, 32), (110, 98, 89), (234, 223, 211), (251, 247, 242)
@@ -184,22 +184,29 @@ def itinerary_pdf(st: dict, name: str = "", checklist: list[dict] | None = None)
     todo = [i for i in checklist or [] if not i.get("done")]
     if todo:
         _heading(pdf, "Before you go")
-        for it in order(todo):
-            if pdf.get_y() > pdf.h - 30:
+        for title, _icon, group in grouped(todo):
+            if pdf.get_y() > pdf.h - 36:
                 pdf.add_page()
-            due = ""
-            if it.get("due"):
-                dd = datetime.fromisoformat(it["due"])
-                due = f"by {dd:%a, %b} {dd.day}"
-            pdf.set_font("Helvetica", "", 10)
-            pdf.set_text_color(*INK)
-            pdf.cell(6, 5.5, "[  ]")
-            pdf.set_font("Helvetica", "B", 10)
-            link = safe_url(it.get("link"))
-            pdf.cell(W - 6 - 34, 5.5, _t(it["text"]), link=link or "")
-            pdf.set_font("Helvetica", "", 9)
-            pdf.set_text_color(*CLAY)
-            pdf.cell(34, 5.5, _t(due), align="R", new_x="LMARGIN", new_y="NEXT")
+            pdf.ln(1.5)
+            pdf.set_font("Helvetica", "B", 9)
+            pdf.set_text_color(*MUTED)
+            pdf.cell(0, 6, _t(title.upper()), new_x="LMARGIN", new_y="NEXT")
+            for it in group:
+                if pdf.get_y() > pdf.h - 30:
+                    pdf.add_page()
+                due = ""
+                if it.get("due"):
+                    dd = datetime.fromisoformat(it["due"])
+                    due = f"by {dd:%a, %b} {dd.day}"
+                pdf.set_font("Helvetica", "", 10)
+                pdf.set_text_color(*INK)
+                pdf.cell(6, 5.5, "[  ]")
+                pdf.set_font("Helvetica", "B", 10)
+                link = safe_url(it.get("link"))
+                pdf.cell(W - 6 - 34, 5.5, _t(it["text"]), link=link or "")
+                pdf.set_font("Helvetica", "", 9)
+                pdf.set_text_color(*CLAY)
+                pdf.cell(34, 5.5, _t(due), align="R", new_x="LMARGIN", new_y="NEXT")
 
     route = safe_url(bk.get("route_url"))
     if route:

@@ -81,3 +81,14 @@ def test_hotels_and_the_car_come_first_on_the_checklist():
              {"kind": "hotel", "due": "2026-12-05", "done": True}, {"kind": "hotel", "due": "2026-11-30"}]
     assert [(i["kind"], i.get("done", False)) for i in order(items)] == [("hotel", False), ("car", False), ("table", False),
                                                                         ("hotel", True)]
+
+
+def test_checklist_groups():
+    from azmulti.checklist import grouped
+    p = Planner()
+    p.ask("5 days in Phoenix then 5 days in Mesa starting 2026-12-21 for 2 people, food and hiking, we need a rental car")
+    groups = grouped(p.checklist())
+    titles = [g[0] for g in groups]
+    assert titles[:2] == ["Where you'll stay", "Getting around"] and "Check before you go" in titles
+    assert sum(len(g[2]) for g in groups) == len(p.checklist())
+    assert all(i["kind"] == "hotel" for i in groups[0][2]) and groups[1][2][0]["kind"] == "car"

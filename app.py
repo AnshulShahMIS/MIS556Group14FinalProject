@@ -1510,19 +1510,29 @@ def checklist_tab():
     st.caption(f"{left} of {len(items)} still to do. Built from your plan: places that take or recommend reservations, "
                "paid attractions, hours to double-check and the weather. Ticks are saved with your trip.")
     today = CL.today_in_arizona()
-    for it in CL.order(items):
-        with card():
-            c = st.columns([0.5, 6, 1.6], vertical_alignment="center")
-            key = f"chk-{it['id']}"
-            c[0].checkbox(it["text"], value=it["done"], key=key, label_visibility="collapsed", disabled=bool(it.get("auto_done")),
-                          on_change=lambda i=it["id"], k=key: ss.planner.set_check(i, bool(ss.get(k))))
-            due = CL.fmt_due(it.get("due"), today)
-            style = "~~" if it["done"] else "**"
-            c[1].markdown(md(f"{style}{it['text']}{style}" + (f"  :orange-badge[{due}]" if due and not it["done"] else "")
-                             + ("  :green-badge[Booked]" if it.get("auto_done") else "")))
-            c[1].caption(md(it["why"]))
-            if it.get("link"):
-                c[2].link_button(it.get("link_label") or "Open", it["link"], use_container_width=True)
+    for title, icon, group in CL.grouped(items):
+        left_g = sum(1 for i in group if not i["done"])
+        st.markdown(md(f"**:material/{icon}: {title}**  " + (f":gray[{left_g} of {len(group)} to do]" if left_g
+                                                              else ":green-badge[All done]")))
+        for it in group:
+            checklist_item(it, today)
+
+
+def checklist_item(it: dict, today):
+    """One checklist row: tick, what to do, when, why and its link."""
+    from azmulti import checklist as CL
+    with card():
+        c = st.columns([0.5, 6, 1.6], vertical_alignment="center")
+        key = f"chk-{it['id']}"
+        c[0].checkbox(it["text"], value=it["done"], key=key, label_visibility="collapsed", disabled=bool(it.get("auto_done")),
+                      on_change=lambda i=it["id"], k=key: ss.planner.set_check(i, bool(ss.get(k))))
+        due = CL.fmt_due(it.get("due"), today)
+        style = "~~" if it["done"] else "**"
+        c[1].markdown(md(f"{style}{it['text']}{style}" + (f"  :orange-badge[{due}]" if due and not it["done"] else "")
+                         + ("  :green-badge[Booked]" if it.get("auto_done") else "")))
+        c[1].caption(md(it["why"]))
+        if it.get("link"):
+            c[2].link_button(it.get("link_label") or "Open", it["link"], use_container_width=True)
 
 
 def trip_details(st_: dict, req: dict, b: dict, stops: list, day_txt: str):
